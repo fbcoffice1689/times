@@ -1,0 +1,10 @@
+# CLASP configuration files
+.clasp.json
+.clapsrc
+
+# Node modules (if you add any future libraries)
+node_modules/
+
+# Logs and IDE specific files
+*.log
+.DS_Store
