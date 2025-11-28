@@ -10,9 +10,6 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f0f4f8; /* Light background */
-            zoom: 0.55; /* Aggressive zoom-out to counteract forced scaling */
-            -moz-transform: scale(0.55);
-            -moz-transform-origin: top left;
         }
         .card {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -95,7 +92,7 @@
                 page-break-after: always; 
             }
             .print-header {
-                display: block !important;
+                display: block !important; /* <--- This overrides the 'hidden' class during print */
                 text-align: center;
                 margin-bottom: 20px;
                 padding-bottom: 10px;
@@ -274,8 +271,8 @@
         </div>
     </div>
 
-<script type="module">
-        // --- IMMEDIATE VIEWPORT FIX (MODIFIED) ---
+    <script type="module">
+        // --- IMMEDIATE VIEWPORT FIX ---
         (function() {
             // 1. Force remove any existing viewport tag
             const metaTags = document.head.getElementsByTagName('meta');
@@ -288,8 +285,8 @@
             // 2. Create the robust viewport tag and inject it
             const newMeta = document.createElement('meta');
             newMeta.name = 'viewport';
-            // ✅ SIMPLIFIED FIX: Removed restrictive parameters to prevent OS blocking the tag
-            newMeta.content = 'width=device-width, initial-scale=1.0'; 
+            // Explicitly set width to device-width and prevent scaling
+            newMeta.content = 'width=device-width, initial-scale=1.0';
             document.head.appendChild(newMeta);
         })(); 
         // -----------------------------
@@ -719,7 +716,7 @@ function renderTasks() {
             // --- 1. Print Header (CORRECTED STRUCTURE) ---
             const printHeaderContainer = document.createElement('div');
             // This class is targeted by the @media print CSS to be DISPLAYED.
-            printHeaderContainer.className = 'print-header'; 
+            printHeaderContainer.className = 'print-header hidden'; 
             
             printHeaderContainer.innerHTML = `
                 <h1 class="text-xl font-bold mb-1">Time Log Report (${startDateFormatted} - ${endDateFormatted})</h1>
@@ -1249,7 +1246,5 @@ function renderTasks() {
         // Start the application initialization when the window loads.
         window.onload = initializeFirebaseAndAuth;
     </script>
-</body>
-</html>
 </body>
 </html>
