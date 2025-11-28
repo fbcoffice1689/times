@@ -298,8 +298,16 @@
         
         // --- Firebase Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+		import { 
+		    getAuth, 
+		    GoogleAuthProvider, // New Import
+		    signInWithPopup,    // New Import
+		    onAuthStateChanged, 
+		    setPersistence, 
+		    browserLocalPersistence 
+		} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+		// Remove signInAnonymously and signInWithCustomToken from the list       
+		import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- State and Constants ---
         let db;
@@ -1213,7 +1221,19 @@ function renderTasks() {
                 if (typeof __initial_auth_token === 'string' && __initial_auth_token.length > 0) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                    await signInAnonymously(auth);
+                    onAuthStateChanged(auth, (user) => {
+    			    if (!user) {
+         			   // 2. If not signed in, prompt for Google login
+           				 const provider = new GoogleAuthProvider();
+            			// Optional: Ask for login immediately upon load, or bind this to a login button
+           				 signInWithPopup(auth, provider).catch(error => {
+            		    console.error("Google Sign-In Failed:", error);
+           			     // Handle user canceling the popup here
+        		    });
+    		    }
+        // The original onAuthStateChanged block (around line 740)
+        // will handle the rest once the user object is successfully received.
+    				});
                 }
 
                 onAuthStateChanged(auth, (user) => {
