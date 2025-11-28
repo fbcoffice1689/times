@@ -288,7 +288,7 @@
          browserLocalPersistence 
          } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
          // Remove signInAnonymously and signInWithCustomToken from the list       
-         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
          
          // --- State and Constants ---
          let db;
@@ -1189,95 +1189,139 @@
          
          
          /**
-         * Handles the entire Firebase initialization and authentication process.
-         * This version uses Google Sign-In (OAuth) instead of Anonymous Auth.
-         */
-         async function initializeFirebaseAndAuth() {
-         try {
-         const app = initializeApp(firebaseConfig);
-         db = getFirestore(app);
-         auth = getAuth(app);
-         
-         // Use local persistence to keep the user signed in across sessions/reloads
-         await setPersistence(auth, browserLocalPersistence);
-         
-         // --- Authentication Flow ---
-         // 1. Check for existing auth state (handles remembering the user)
-         onAuthStateChanged(auth, async (user) => {
-             if (user) {
-                 // User is signed in or just successfully signed in via popup.
-                 document.getElementById('login-container').classList.add('hidden'); // Hide login prompt
-         
-                 userId = user.uid;
-                 userIdDisplayEl.textContent = userId;
-                 userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
-                 
-                 // Enable all controls after successful sign-in
-                 clockToggleBtn.disabled = false;
-                 breakToggleBtn.disabled = false;
-                 addTaskBtn.disabled = false;
-                 printReportBtn.disabled = false;
-                 markReportedBtn.disabled = false;
-                 manageLogsBtn.disabled = false;
-                 
-                 // Load real-time data for the authenticated user
-                 loadStateFromFirestore(); 
-         
-             } else {
-                 // User is NOT logged in. Show the manual sign-in prompt.
-                 
-                 // Disable all functional controls
-                 clockToggleBtn.disabled = true;
-                 breakToggleBtn.disabled = true;
-                 addTaskBtn.disabled = true;
-                 printReportBtn.disabled = true;
-                 markReportedBtn.disabled = true;
-                 manageLogsBtn.disabled = true;
-         
-                 // Show the sign-in prompt box
-                 document.getElementById('login-container').classList.remove('hidden');
-                 
-                 userIdDisplayEl.textContent = 'Signed Out';
-                 userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
-                 userIdDisplayEl.classList.add('text-red-500'); // Optional visual cue
-             }
-         });
-         
-         // If the old custom token logic is still required for your GAS environment, 
-         // you would run it here, before the onAuthStateChanged listener starts.
-         if (typeof __initial_auth_token === 'string' && __initial_auth_token.length > 0) {
-             // This is usually only necessary if GAS is generating a specific token for internal use
-             // For general user login, relying on GoogleAuthProvider is better.
-             // await signInWithCustomToken(auth, __initial_auth_token).catch(e => console.error("Custom token sign-in failed:", e));
-         }
-         
-         } catch (e) {
-         console.error("Firebase Initialization Error:", e);
-         userIdDisplayEl.textContent = 'Error (DB Failed)';
-         userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
-         showMessage("Initialization Failed", `Could not connect to Firebase: ${e.message}. The app is non-functional.`, true);
-         }
-         }
+ * Handles the entire Firebase initialization and authentication process.
+ * This version uses Google Sign-In (OAuth) and authorization via Firestore check.
+ */
+async function initializeFirebaseAndAuth() {
+    try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        
+        // Use local persistence to keep the user signed in across sessions/reloads
+        await setPersistence(auth, browserLocalPersistence);
+
+        // --- Authentication Flow ---
+        onAuthStateChanged(auth, async (user) => {
+            // Disable all buttons immediately until state is determined
+            clockToggleBtn.disabled = true;
+            breakToggleBtn.disabled = true;
+            addTaskBtn.disabled = true;
+            printReportBtn.disabled = true;
+            markReportedBtn.disabled = true;
+            manageLogsBtn.disabled = true;
+            
+            if (user) {
+                const userEmail = user.email; // Get the email from the authenticated user object
+
+                // 🟢 AUTHORIZATION CHECK
+                const isAuthorized = await checkAuthorization(userEmail);
+                
+                if (isAuthorized) {
+                    // User is authenticated AND authorized: proceed to load the app
+                    document.getElementById('login-container').classList.add('hidden'); // Hide login prompt
+
+                    userId = user.uid; // Keep tracking UID
+                    userIdDisplayEl.textContent = userEmail; // Display email for better user context
+                    userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer', 'text-red-500');
+                    
+                    // Enable all functional controls
+                    clockToggleBtn.disabled = false;
+                    breakToggleBtn.disabled = false;
+                    addTaskBtn.disabled = false;
+                    printReportBtn.disabled = false;
+                    markReportedBtn.disabled = false;
+                    manageLogsBtn.disabled = false;
+                    
+                    // Load real-time data for the authenticated user
+                    loadStateFromFirestore(); 
+
+                } else {
+                    // User is authenticated but NOT authorized: force sign-out and show access denied.
+                    auth.signOut(); // Log them out immediately
+                    document.getElementById('google-sign-in-btn').disabled = false;
+                    document.getElementById('google-sign-in-btn').textContent = "Access Denied";
+                    
+                    showMessage("Access Denied", `The Google account (${userEmail}) is not authorized to use this application.`, true);
+                    
+                    // Fall through to the 'else' block below to display the sign-in container
+                }
+
+            } 
+            
+            if (!user) {
+                // User is signed out or access was just denied.
+                document.getElementById('login-container').classList.remove('hidden');
+                
+                userIdDisplayEl.textContent = 'Signed Out';
+                userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
+                userIdDisplayEl.classList.add('text-red-500'); 
+            }
+        });
+        
+        // The custom token logic is omitted as Google sign-in is now the primary method.
+
+    } catch (e) {
+        console.error("Firebase Initialization Error:", e);
+        userIdDisplayEl.textContent = 'Error (DB Failed)';
+        userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
+        showMessage("Initialization Failed", `Could not connect to Firebase: ${e.message}. The app is non-functional.`, true);
+    }
+}
          
          // New function outside of initializeFirebaseAndAuth
          window.handleGoogleSignIn = function() {
-         const auth = getAuth();
-         const provider = new GoogleAuthProvider();
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+
+    signInWithPopup(auth, provider)
+    .then((result) => {
+        // Sign-in successful. onAuthStateChanged listener handles the rest.
+        console.log("Google Sign-in successful.");
+    })
+    .catch((error) => {
+        // Handle Errors (e.g., user closed the popup, or permission denied)
+        console.error("Google Sign-In Failed:", error);
+        
+        let errorMessage = `Reason: ${error.code}`;
+        if (error.code === 'auth/popup-closed-by-user') {
+             errorMessage = "Sign-in popup closed. Please try again.";
+        }
+        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
+    });
+}
          
-         signInWithPopup(auth, provider)
-         .then((result) => {
-         	// User successfully signed in. onAuthStateChanged handles UI update.
-         	console.log("Google Sign-in successful.");
-         })
-         .catch((error) => {
-         // Handle Errors, e.g., if the user closes the popup
-         console.error("Google Sign-In Failed:", error);
-         showMessage("Sign-in Failed", `Could not complete Google sign-in. Reason: ${error.code}`, true);
-         });
-         }
+         /**
+ * Checks if the signed-in user's email exists in the Firestore authorizedUsers collection.
+ * @param {string} email - The user's authenticated email address.
+ * @returns {Promise<boolean>} True if authorized, false otherwise.
+ */
+async function checkAuthorization(email) {
+    if (!db) return false;
+
+    // Use lowercase email as the document ID
+    const normalizedEmail = email.toLowerCase();
+    
+    // Reference the specific document (the user's email) in the public auth list
+    const authDocPath = `artifacts/${appId}/public/data/authorizedUsers/${normalizedEmail}`;
+    const authRef = doc(db, authDocPath);
+    
+    try {
+        // Use getDoc to fetch the single document snapshot
+        const docSnap = await getDoc(authRef);
+        
+        // Authorization is granted if the document exists
+        return docSnap.exists();
+    } catch (e) {
+        console.error("Error checking authorization:", e);
+        // Fail safe: If there's a database error, assume not authorized
+        return false; 
+    }
+}
          
          // Start the application initialization when the window loads.
          window.onload = initializeFirebaseAndAuth;
+         
       </script>
    </body>
 </html>
