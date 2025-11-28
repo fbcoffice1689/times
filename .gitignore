@@ -1,9 +1,7 @@
-# CLASP configuration files
+# In your .gitignore file:
 .clasp.json
 .clapsrc
-
-# Node modules (if you add any future libraries)
-node_modules/
+/node_modules
 
 # Logs and IDE specific files
 *.log
