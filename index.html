@@ -80,8 +80,8 @@
             .no-print {
                 display: none !important;
             }
-            /* Ensure the main report container takes up the full page */
-            #log-report-container {
+
+  	          #log-report-container {
                 position: absolute;
                 left: 0;
                 top: 0;
@@ -487,24 +487,26 @@ function renderTasks() {
         item.className = itemClasses;
         
         const textContainer = document.createElement('div');
-        // ✅ Responsive margin: mr-2 on mobile, mr-4 on larger screens
         textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
         
         const textSpan = document.createElement('span');
-        // ✅ Responsive text: text-xs on mobile, text-sm on larger screens
-        textSpan.className = `text-xs sm:text-sm font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
+        // 👇 MAIN TASK TEXT: Enlarged to text-sm on mobile, bumps to text-base on screens >= sm
+        textSpan.className = `text-base sm:text-base font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
         textSpan.textContent = task.text;
         textContainer.appendChild(textSpan);
         
         if (task.dueDate) {
             const dueDateSpan = document.createElement('span');
             const dateObj = new Date(task.dueDate + 'T00:00:00');
-            dueDateSpan.className = `text-xs mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+            // 👇 DUE DATE: Enlarged to text-sm on mobile (was text-xs before)
+            dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
             dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
             textContainer.appendChild(dueDateSpan);
         }
 
         const creatorInfo = document.createElement('div');
+        // 👇 CREATOR INFO: Explicitly set to the smallest size (text-xs) and left alone
+        //    This ensures it stays small even if the parent container's font size is forced larger.
         creatorInfo.className = 'text-xs mt-0.5 text-gray-500';
         creatorInfo.textContent = `By: ${task.ownerId ? task.ownerId.substring(0, 8) + '...' : 'Unknown'}`;
         textContainer.appendChild(creatorInfo);
