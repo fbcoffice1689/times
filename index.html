@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>External GAS Report Sender</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; padding: 20px; }
+        #message-box { min-height: 50px; padding: 10px; margin-top: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body class="p-4">
+
+    <div class="max-w-lg mx-auto bg-white p-6 rounded-xl shadow-lg">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">External Apps Script Sync Test</h1>
+        <p class="text-sm text-gray-600 mb-6">
+            This file is hosted externally and uses the Fetch API to call the 
+            `recordFinalReport` function in your Google Apps Script Web App.
+        </p>
+
+        <h2 class="text-xl font-semibold mb-3">Simulated Report Data</h2>
+        
+        <div id="report-data-display" class="space-y-2 mb-6 p-4 bg-gray-50 rounded">
+            <p><strong>Cutoff Time:</strong> <span id="cutoff-time">2025-11-28T18:00:00.000Z</span></p>
+            <p><strong>Work Hours:</strong> <span id="work-hours">08:30:00</span></p>
+            <p><strong>Break Hours:</strong> <span id="break-hours">01:00:00</span></p>
+        </div>
+
+        <button id="sync-button" 
+                onclick="sendReportData()" 
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+            Send Report to Google Sheet (via POST)
+        </button>
+
+        <div id="message-box" class="bg-blue-100 text-blue-700 hidden" role="alert"></div>
+    </div>
+
+    <script>
+        // 🚨 IMPORTANT: REPLACE THIS URL with your actual Apps Script Web App URL ending in /exec
+        const EXTERNAL_DEPLOYMENT_URL = "YOUR_EXEC_URL_HERE"; 
+        
+        const syncButton = document.getElementById('sync-button');
+        const messageBox = document.getElementById('message-box');
+
+        function showMessage(message, isError = false) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-blue-100', 'bg-red-100', 'text-blue-700', 'text-red-700');
+            
+            if (isError) {
+                messageBox.classList.add('bg-red-100', 'text-red-700');
+            } else {
+                messageBox.classList.add('bg-blue-100', 'text-blue-700');
+            }
+        }
+
+        async function sendReportData() {
+            if (EXTERNAL_DEPLOYMENT_URL === "YOUR_EXEC_URL_HERE") {
+                showMessage("Error: Please replace 'YOUR_EXEC_URL_HERE' with your actual Deployment URL.", true);
+                return;
+            }
+
+            syncButton.disabled = true;
+            showMessage("Sending data...", false);
+
+            const dataToSend = {
+                cutoffTimestamp: document.getElementById('cutoff-time').textContent,
+                totalWorkHours: document.getElementById('work-hours').textContent,
+                totalBreakHours: document.getElementById('break-hours').textContent,
+            };
+
+            // Structure the payload for the Apps Script doPost gateway function
+            const payload = {
+                functionName: "recordFinalReport", // The GAS function defined in your Code.gs
+                parameters: [dataToSend]
+            };
+
+            try {
+                const response = await fetch(EXTERNAL_DEPLOYMENT_URL, {
+                    method: "POST",
+                    // NOTE: Use 'text/plain' for the Content-Type header. 
+                    // This is necessary for Google Apps Script to correctly parse the JSON content 
+                    // via e.postData.contents in the doPost(e) function.
+                    headers: {
+                        "Content-Type": "text/plain" 
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    showMessage(`Success! Logged ${dataToSend.totalWorkHours} hours.`, false);
+                } else {
+                    // Handle failure response from the GAS doPost function
+                    throw new Error(result.message || "Unknown error from server.");
+                }
+
+            } catch (error) {
+                showMessage(`Sync Failed: ${error.message}`, true);
+            } finally {
+                syncButton.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
