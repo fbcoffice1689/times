@@ -78,6 +78,12 @@
          .no-print {
          display: none !important;
          }
+         #log-history-list {
+         max-height: none !important; /* Allows the content to expand fully */
+         overflow: visible !important; /* Disables the scrollbar */
+         border: none !important;      /* Removes the border from the printout */
+         padding: 0 !important;        /* Removes the padding from the printout */
+         }
          #log-report-container {
          position: absolute;
          left: 0;
@@ -156,7 +162,7 @@
             Initializing...
             </button>
          </div>
-         <div class="bg-indigo-600 card rounded-xl p-6 mb-8 text-white no-print">
+         <div class="bg-cyan-700 card rounded-xl p-6 mb-8 text-white no-print">
             <h2 class="text-xl font-bold mb-2">Unreported Time Summary (Synced)</h2>
             <p id="report-since" class="text-sm opacity-75 mb-4">Last reported: <span id="last-reported-date" class="font-semibold loading-text loading-shimmer rounded">Loading date...</span></p>
             <div class="flex flex-col space-y-2 mb-4">
@@ -169,7 +175,7 @@
                   <span id="total-break-time" class="font-mono loading-text loading-shimmer rounded">00:00:00</span>
                </div>
             </div>
-            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-indigo-700 hover:bg-indigo-800 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
+            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-cyan-800 hover:bg-cyan-900 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
             Mark All as Reported
             </button>
          </div>
@@ -507,7 +513,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          const completeBtn = document.createElement('button');
          // ✅ active:scale-95 for touch feedback
          // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         completeBtn.className = `flex-shrink-0 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
+         completeBtn.className = `flex-shrink-0 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-200 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
          completeBtn.textContent = completed ? 'Undo' : 'Done';
          completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
          
@@ -614,7 +620,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
                      const durationMs = nowMs - breakStart;
                      segments.push({ type: 'BREAK', start: new Date(breakStart), end: now, durationMs: durationMs, isLive: true });
                      totalBreakMs += durationMs;
-                 } else if (!currentState.isUserOnBreak && workStart !== null && workStart > filterCutoffMs) {
+                 } else if (workStart !== null && workStart > filterCutoffMs) {
                      const durationMs = nowMs - workStart;
                      segments.push({ type: 'WORK', start: new Date(workStart), end: now, durationMs: durationMs, isLive: true });
                      totalWorkMs += durationMs;
@@ -791,7 +797,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              logHistoryListEl.appendChild(table);
              
              // 3. Update the UI summary totals using the calculated raw milliseconds
-             renderReportSummary(netWorkTimeFormatted, msToHours(totalBreakTimeMs));
+             renderReportSummary(netWorkTimeFormatted, msToHours(totalWorkTimeMs));
          }
          
          // --- Render Main Log View based on isManagingLogs state ---
