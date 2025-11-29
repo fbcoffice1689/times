@@ -162,7 +162,7 @@
             Initializing...
             </button>
          </div>
-         <div class="bg-cyan-700 card rounded-xl p-6 mb-8 text-white no-print">
+         <div class="bg-indigo-700 card rounded-xl p-6 mb-8 text-white no-print">
             <h2 class="text-xl font-bold mb-2">Unreported Time Summary (Synced)</h2>
             <p id="report-since" class="text-sm opacity-75 mb-4">Last reported: <span id="last-reported-date" class="font-semibold loading-text loading-shimmer rounded">Loading date...</span></p>
             <div class="flex flex-col space-y-2 mb-4">
@@ -214,13 +214,23 @@
                   <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
                   Manage Log Events
                   </button>
+                  <button id="download-csv-btn" onclick="downloadLogsAsCsv()" 
+                          class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold p-3 rounded-xl transition duration-150" 
+                          title="Download Full Log History as CSV" 
+                          style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                  </button>
                   <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
                   Print Report
                   </button>
                </div>
             </div>
             <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-               <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
+               <p class="text-center py-6 text-gray-500" id="history-loading">Awaiting session data...</p>
             </div>
             <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
          </div>
@@ -513,7 +523,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          const completeBtn = document.createElement('button');
          // ✅ active:scale-95 for touch feedback
          // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         completeBtn.className = `flex-shrink-0 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-200 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
+         completeBtn.className = `flex-shrink-0 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
          completeBtn.textContent = completed ? 'Undo' : 'Done';
          completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
          
@@ -874,7 +884,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              }
          }
          
-         window.handleDeleteEvent = async function(logId, logType) {
+         window.handleDeleteEvent = async function() {
              // NOTE: Using a custom modal instead of window.confirm
              if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
                  return;
@@ -1163,7 +1173,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
                  showMessage("Task Added", `Synced task '${text}' added!`, false);
              } catch (e) {
                  console.error("Error adding public task:", e);
-                 showMessage("Save Error", "Failed to save public task.", true);
+                 showMessage("Save Error", `Failed to save public task. Error: ${e.message}`, true);
              }
          }
          
