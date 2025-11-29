@@ -1367,10 +1367,56 @@ async function checkAuthorization(email) {
     }
 }
 
-// --- Client-Side Scripting (Index.html) ---
+/**
+ * Fetches ALL raw log events from Firestore, serializes them into a JSON string,
+ * and sends this string to the GAS backend for reliable writing to the Sheet.
+ * * NOTE: This function MUST be present for the download button's onclick="syncRawLogsToSheet()" to work.
+ */
+window.syncRawLogsToSheet = function() {
+    if (!userId) {
+        showMessage("Sync Error", "Please sign in before syncing data.", true);
+        return;
+    }
+    
+    if (rawLogEvents.length === 0) {
+        showMessage("Sync Status", "No log events found to sync.", false);
+        return;
+    }
 
-// --- Replacement for window.syncRawLogsToSheet function in Index.html ---
+    // 1. Filter to ensure we only process valid log objects.
+    const validRawLogs = rawLogEvents.filter(log => log.timestamp && log.type); 
 
+    if (validRawLogs.length === 0) {
+        showMessage("Sync Status", "Log history contains no readable entries.", false);
+        return;
+    }
+
+    // 2. Map the data, enforcing all values are simple strings for serialization safety.
+    const simpleLogsArray = validRawLogs.map(log => {
+        // Guarantee simple string conversion for the final array structure: [Timestamp, Type, Status]
+        return [
+            String(log.timestamp) || 'CORRUPT_TIMESTAMP',
+            String(log.type) || 'ACTION_MISSING',
+            ''
+        ];
+    }).reverse(); // Reverse the order to show oldest logs first in the Sheet
+
+    // 3. Serialize the entire array into a single JSON string for reliable transfer.
+    const jsonStringToSend = JSON.stringify(simpleLogsArray);
+
+    showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
+
+    // Call the correct GAS function (assuming you reverted to writeRawLogsFromJson)
+    google.script.run
+        .withSuccessHandler(() => {
+            showMessage("Sync Complete", `Successfully synced ${simpleLogsArray.length} log entries to the spreadsheet.`, false);
+        })
+        .withFailureHandler(error => {
+            console.error("Sheet Sync Failed:", error);
+            showMessage("Sync Failed", `Could not write data to sheet. Error: ${error.message}`, true);
+        })
+        .writeRawLogsFromJson(jsonStringToSend); // ❗ Must match the function name in Code.js
+}
          
          // Start the application initialization when the window loads.
          window.onload = initializeFirebaseAndAuth;
