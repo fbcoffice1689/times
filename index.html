@@ -1370,7 +1370,6 @@ async function checkAuthorization(email) {
 /**
  * Fetches ALL raw log events from Firestore, serializes them into a JSON string,
  * and sends this string to the GAS backend for reliable writing to the Sheet.
- * * NOTE: This function MUST be present for the download button's onclick="syncRawLogsToSheet()" to work.
  */
 window.syncRawLogsToSheet = function() {
     if (!userId) {
@@ -1406,7 +1405,7 @@ window.syncRawLogsToSheet = function() {
 
     showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
 
-    // Call the correct GAS function (assuming you reverted to writeRawLogsFromJson)
+    // Call the correct GAS function with the final name
     google.script.run
         .withSuccessHandler(() => {
             showMessage("Sync Complete", `Successfully synced ${simpleLogsArray.length} log entries to the spreadsheet.`, false);
@@ -1415,7 +1414,7 @@ window.syncRawLogsToSheet = function() {
             console.error("Sheet Sync Failed:", error);
             showMessage("Sync Failed", `Could not write data to sheet. Error: ${error.message}`, true);
         })
-        .writeRawLogsFromJson(jsonStringToSend); // ❗ Must match the function name in Code.js
+        .writeRawLogsFromJson(jsonStringToSend); 
 }
          
          // Start the application initialization when the window loads.

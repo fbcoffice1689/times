@@ -941,3 +941,84 @@ function recordFinalReport(data) {
   
   Logger.log(`Aggregated Report recorded for user ${currentUserId} at ${reportDate}.`);
 }
+
+/**
+ * Receives raw log entries as a JSON string from the client, 
+ * safely parses it, and writes the data to the 'Time Logs Report' sheet.
+ * * This version uses strict string parsing to prevent "Illegal Value" TypeErrors.
+ * @param {string} rawDataJsonString A JSON string representing the array of log entries.
+ */
+function writeRawLogsFromJson(rawDataJsonString) {
+  const sheetName = "Time Logs Report (Raw Sync)";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  
+  // 1. Parse the JSON string into a JavaScript array
+  let rawData;
+  try {
+    rawData = JSON.parse(rawDataJsonString);
+  } catch (e) {
+    Logger.log("FATAL ERROR: Could not parse JSON data from client. " + e.toString());
+    return;
+  }
+
+  if (rawData.length === 0) {
+    sheet.clear();
+    sheet.getRange('A1').setValue("No Log Entries Found in Firestore.");
+    return;
+  }
+  
+  // 2. Map the data, enforcing all values are pure strings or safely-created Dates.
+  const processedData = rawData.map(row => {
+    // Row structure is expected to be [Timestamp String, Action String, Status String]
+    const timestampString = String(row[0] || 'CORRUPT_TIMESTAMP');
+    const actionString = String(row[1] || 'ACTION_MISSING');        
+    const statusString = String(row[2] || '');                      
+    
+    let timestampValue;
+    try {
+      // Attempt to create a Date object on the server.
+      const dateObject = new Date(timestampString);
+      
+      // If conversion is valid, use the Date object; otherwise, use the string.
+      timestampValue = isNaN(dateObject.getTime()) ? timestampString : dateObject;
+      
+    } catch (e) {
+      // Final fallback to the original string if parsing fails
+      timestampValue = timestampString;
+    }
+
+    // Return the final clean array.
+    return [
+      timestampValue, 
+      actionString, 
+      statusString
+    ];
+  }).filter(row => row !== null); 
+
+  if (processedData.length === 0) {
+      sheet.clear();
+      sheet.getRange('A1').setValue("All log entries were corrupted or invalid.");
+      return;
+  }
+  
+  // Define header row
+  const headers = ["Timestamp", "Action", "Status"];
+  
+  // Clear existing content and set headers
+  sheet.clear();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#d9ead3");
+  
+  // 3. Write data to the sheet
+  const startRow = 2;
+  const numRows = processedData.length;
+  const numCols = 3; 
+  
+  sheet.getRange(startRow, 1, numRows, numCols).setValues(processedData);
+  
+  Logger.log(`Successfully synced ${numRows} raw log entries from client via JSON.`);
+}
