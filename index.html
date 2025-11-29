@@ -279,17 +279,15 @@
          
          // --- Firebase Imports ---
          import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-         import { 
-         getAuth, 
-         GoogleAuthProvider, // New Import
-         signInWithPopup,    // New Import
-         onAuthStateChanged, 
-         setPersistence, 
-         browserLocalPersistence 
-         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-         // Remove signInAnonymously and signInWithCustomToken from the list       
-         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-         
+import { 
+    getAuth, 
+    GoogleAuthProvider, 
+    signInWithPopup,    
+    onAuthStateChanged, 
+    setPersistence, 
+    browserLocalPersistence 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
          // --- State and Constants ---
          let db;
          let auth;
@@ -1188,7 +1186,7 @@
          }
          
          
-         /**
+/**
  * Handles the entire Firebase initialization and authentication process.
  * This version uses Google Sign-In (OAuth) and authorization via Firestore check.
  */
@@ -1212,8 +1210,16 @@ async function initializeFirebaseAndAuth() {
             manageLogsBtn.disabled = true;
             
             if (user) {
-                const userEmail = user.email; // Get the email from the authenticated user object
+                const userEmail = user.email; 
 
+                // 🛑 CRITICAL NULL CHECK: If the email is null or empty, the user session is bad.
+                if (!userEmail || userEmail.length === 0) {
+                    auth.signOut(); // Force immediate sign-out
+                    console.error("Authentication failed: User object returned with null or empty email.");
+                    showMessage("Login Failed", "Could not retrieve user email address. Please sign in again.", true);
+                    return; // Exit function and fall to the !user logic
+                }
+                
                 // 🟢 AUTHORIZATION CHECK
                 const isAuthorized = await checkAuthorization(userEmail);
                 
@@ -1259,7 +1265,7 @@ async function initializeFirebaseAndAuth() {
             }
         });
         
-        // The custom token logic is omitted as Google sign-in is now the primary method.
+        // Custom token logic is removed/omitted.
 
     } catch (e) {
         console.error("Firebase Initialization Error:", e);
@@ -1268,6 +1274,7 @@ async function initializeFirebaseAndAuth() {
         showMessage("Initialization Failed", `Could not connect to Firebase: ${e.message}. The app is non-functional.`, true);
     }
 }
+
          
          // New function outside of initializeFirebaseAndAuth
          window.handleGoogleSignIn = function() {
@@ -1291,24 +1298,49 @@ async function initializeFirebaseAndAuth() {
     });
 }
          
-         /**
+ /**
+ * Handles the Google Sign-In pop-up, triggered by the user clicking the button.
+ */
+window.handleGoogleSignIn = function() {
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+
+    signInWithPopup(auth, provider)
+    .then((result) => {
+        // Sign-in successful. onAuthStateChanged listener handles UI update.
+        console.log("Google Sign-in successful.");
+    })
+    .catch((error) => {
+        // Handle Errors (e.g., user closed the popup, network issues)
+        console.error("Google Sign-In Failed:", error);
+        
+        let errorMessage = `Reason: ${error.code}`;
+        if (error.code === 'auth/popup-closed-by-user') {
+             errorMessage = "Sign-in popup closed. Please try again.";
+        }
+        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
+    });
+}
+
+/**
  * Checks if the signed-in user's email exists in the Firestore authorizedUsers collection.
+ * This function requires a single, valid document to exist with the user's email as the ID.
  * @param {string} email - The user's authenticated email address.
  * @returns {Promise<boolean>} True if authorized, false otherwise.
  */
 async function checkAuthorization(email) {
     if (!db) return false;
 
-    // Use lowercase email as the document ID
+    // Normalize email to lowercase (as done in the database)
     const normalizedEmail = email.toLowerCase();
     
-    // Reference the specific document (the user's email) in the public auth list
+    // Path: artifacts/{appId}/public/data/authorizedUsers/{email}
     const authDocPath = `artifacts/${appId}/public/data/authorizedUsers/${normalizedEmail}`;
     const authRef = doc(db, authDocPath);
     
     try {
-        // Use getDoc to fetch the single document snapshot
-        const docSnap = await getDoc(authRef);
+        // Fetch the single document
+        const docSnap = await getDoc(authRef); 
         
         // Authorization is granted if the document exists
         return docSnap.exists();
