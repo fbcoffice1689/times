@@ -904,51 +904,63 @@ function toggleReminder() {
 
 // --- NEW FUNCTIONS FOR GOOGLE SHEET SYNC ---
 
-// 1. Core function to retrieve all time log entries
+// 1. Core function to retrieve all time log entries from Firestore
 function getTimeLogsForReporting() {
-  // Use the Firebase Admin SDK (if set up) or the REST API here.
-  // Since we don't have Admin SDK keys, let's assume we read from the public path.
-  // NOTE: This REST API method requires a public, readable Firestore path.
-  // Ensure your Firestore rules allow unauthenticated READ to the logs path for this to work:
-  // match /artifacts/{appId}/public/data/timeLogs/{logId} { allow read; }
-  
   const FIREBASE_API_KEY = "AIzaSyAGxZVLaHkowzF5ioMGGS9FnqMh31Zs5ds"; // From your config
   const PROJECT_ID = "timeclockapp-59694"; // From your config
   const APP_ID = '1:271808577978:web:c2e0f745681401fe4f1d83'; // From your config
   
-  // NOTE: Direct REST API reads of collections are complex. 
-  // A simpler, more robust method is usually best. 
-  // Since your existing HTML is using real-time listeners, we will stick to a simpler, direct method:
-  // Assume a helper function is available to fetch all documents in the collection:
-  
+  // NOTE: This REST endpoint retrieves all documents in the 'timeLogs' collection.
   const FIRESTORE_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/artifacts/${APP_ID}/public/data/timeLogs?key=${FIREBASE_API_KEY}`;
   
   try {
-    // This is a simplified way to hit the REST endpoint for demonstration, but 
-    // retrieving full collections via REST is often restrictive/complex in practice.
-    // For a real-world GAS solution, you would typically use an App Script library for Firestore.
+    const response = UrlFetchApp.fetch(FIRESTORE_URL);
+    const json = JSON.parse(response.getContentText());
     
-    // Fallback: If direct REST fails, a trigger-based approach is often better:
-    // (See Step 3 for the Trigger/Web App approach)
+    // Check if documents exist in the response
+    const documents = json.documents;
+    if (!documents || documents.length === 0) {
+      Logger.log("Firestore timeLogs collection is empty or not found.");
+      return [];
+    }
     
-    // For now, let's return mock data to test the sync function structure:
-    return [
-      ["ID_A", "CLOCK_IN", "2025-11-26T08:00:00.000Z"],
-      ["ID_B", "BREAK_START", "2025-11-26T12:00:00.000Z"],
-      ["ID_C", "BREAK_END", "2025-11-26T13:00:00.000Z"],
-      ["ID_D", "CLOCK_OUT", "2025-11-26T17:00:00.000Z"]
-    ];
+    let logData = [];
+    
+    documents.forEach(doc => {
+      // Extract the document ID (the last part of the 'name' field)
+      const docId = doc.name.split('/').pop();
+      const fields = doc.fields;
+      
+      // Extract specific fields, checking if they exist
+      const type = fields.type ? fields.type.stringValue : 'UNKNOWN_ACTION';
+      const timestamp = fields.timestamp ? fields.timestamp.stringValue : new Date().toISOString();
+      
+      // Order the data: [Log ID, Event Type, Timestamp]
+      logData.push([
+        docId, 
+        type, 
+        timestamp
+      ]);
+    });
+    
+    return logData;
     
   } catch (e) {
-    Logger.log("Error fetching logs: " + e.toString());
+    // If the URL is wrong, API key is wrong, or network fails.
+    Logger.log("Error fetching logs from Firestore REST API: " + e.toString());
+    // Fallback to empty array
     return [];
   }
 }
 
 
-// 2. Function to write the retrieved data to the Google Sheet
-function syncLogsToSheet() {
-  const sheetName = "Time Logs Report";
+/**
+ * Receives raw log entries from the client's browser and overwrites 
+ * the 'Time Logs Report' sheet with the complete log history.
+ * @param {Array<Array<any>>} rawData An array of log entries [Timestamp, Action, Status].
+ */
+function receiveAndWriteRawLogs(rawData) {
+  const sheetName = "Time Logs Report (Raw Sync)";
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
   // Get or create the log sheet
@@ -957,15 +969,15 @@ function syncLogsToSheet() {
     sheet = ss.insertSheet(sheetName);
   }
   
-  const data = getTimeLogsForReporting();
-
-  if (data.length === 0) {
-    Logger.log("No log data to sync.");
+  if (rawData.length === 0) {
+    sheet.clear();
+    sheet.getRange('A1').setValue("No Log Entries Found in Firestore.");
+    Logger.log("No log data received from client for sync.");
     return;
   }
   
   // Define header row
-  const headers = ["Log ID", "Event Type", "Timestamp"];
+  const headers = ["Timestamp", "Action", "Status"];
   
   // Clear existing content and set headers
   sheet.clear();
@@ -973,12 +985,12 @@ function syncLogsToSheet() {
   
   // Write data starting from the second row
   const startRow = 2;
-  const numRows = data.length;
-  const numCols = data[0].length;
+  const numRows = rawData.length;
+  const numCols = rawData[0].length;
   
-  sheet.getRange(startRow, 1, numRows, numCols).setValues(data);
+  sheet.getRange(startRow, 1, numRows, numCols).setValues(rawData);
   
-  Logger.log(`Successfully synced ${numRows} time log entries to the sheet.`);
+  Logger.log(`Successfully synced ${numRows} raw log entries from client.`);
 }
 
 /**
@@ -1017,6 +1029,4 @@ function recordFinalReport(data) {
   sheet.appendRow(rowData);
   
   Logger.log(`Aggregated Report recorded for user ${currentUserId} at ${reportDate}.`);
-  
-  // The client side success handler is now responsible for confirming the update to the user.
 }

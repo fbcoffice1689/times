@@ -208,6 +208,10 @@
                   <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
                   Manage Log Events
                   </button>
+                  <button id="sync-raw-btn" onclick="syncRawLogsToSheet()" 
+				          class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150">
+				      Sync Full Log to Sheet
+				  </button>
                   <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
                   Print Report
                   </button>
@@ -1349,6 +1353,45 @@ async function checkAuthorization(email) {
         // Fail safe: If there's a database error, assume not authorized
         return false; 
     }
+}
+
+/**
+ * Fetches ALL raw log events from Firestore (via the listener state) 
+ * and sends them to the GAS backend for writing to the Sheet.
+ */
+window.syncRawLogsToSheet = function() {
+    if (!userId) {
+        showMessage("Sync Error", "Please sign in before syncing data.", true);
+        return;
+    }
+    
+    // We already have the full log history stored in the 'rawLogEvents' global variable.
+    if (rawLogEvents.length === 0) {
+        showMessage("Sync Status", "No log events found to sync.", false);
+        return;
+    }
+
+    // Map the stored raw events into a simple 3-column array format 
+    // [Timestamp, Action Type, Status (usually empty)] that GAS expects.
+    // NOTE: This assumes your logs in Firestore only have 'type' and 'timestamp'.
+    const logsToSend = rawLogEvents.map(log => [
+        new Date(log.timestamp), // Convert ISO string back to Date object for Sheets
+        log.type,
+        '' // Status field is usually empty or unused for raw logs
+    ]).reverse(); // Sheets looks best with oldest logs first, so reverse the descending order
+
+    showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
+
+    // Call the GAS server function
+    google.script.run
+        .withSuccessHandler(() => {
+            showMessage("Sync Complete", `Successfully synced ${logsToSend.length} log entries to the spreadsheet.`, false);
+        })
+        .withFailureHandler(error => {
+            console.error("Sheet Sync Failed:", error);
+            showMessage("Sync Failed", `Failed to write logs to sheet. Error: ${error.message}`, true);
+        })
+        .receiveAndWriteRawLogs(logsToSend);
 }
          
          // Start the application initialization when the window loads.
