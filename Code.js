@@ -824,28 +824,104 @@ function getReportData() {
 // --- REPORTING FUNCTION FOR GOOGLE SHEETS ---
 
 /**
- * Custom function to calculate and output a structured report of completed work sessions.
- * @param {any} forceRecalculation A unique dummy argument used to force Google Sheets to recalculate 
- * the function when the formula or the referenced cell changes.
- * @returns {Array<Array<any>>} A two-dimensional array of report data (5 columns, 1st is empty).
+ * Utility function to convert the report data duration from milliseconds.
+ * (This function already exists in Code.js but is included for context)
+ * @param {number} totalMilliseconds The duration in milliseconds.
+ * @returns {string} The duration formatted as HH:mm:ss.
  */
-function calculateReportFinal(forceRecalculation) {
-  const report = getReportData();
+function formatMsToDuration(totalMilliseconds) {
+  const totalSeconds = Math.floor(totalMilliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   
-  // NOTE: Added ONE leading empty string for the dummy column (index 0)
-  const reportHeaders = [["", "Date (Session)", "Time IN", "Time OUT", "Total Duration"]];
-
-  if (report.sessions.length === 0) {
-    // 5-element array for empty report
-    return reportHeaders.concat([["", "No new hours to report since the last reset.", "", "", ""]]);
-  }
-  
-  // Map the 4-column session data back to the 5-column structure needed by the sheet formula (adding the dummy empty column)
-  const sheetSessions = report.sessions.map(session => ["", ...session]);
-
-  return reportHeaders.concat(sheetSessions);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+
+/**
+ * Custom function that reads the raw data from the 'Time Logs Report (Raw Sync)' 
+ * sheet and calculates the final work sessions and total time.
+ * * @returns {Array<Array<any>>} A two-dimensional array of report data (5 columns).
+ */
+function calculateReportFromSyncedLogs(dummy) {
+  const SYNC_SHEET_NAME = "Time Logs Report (Raw Sync)";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SYNC_SHEET_NAME);
+  
+  // Fallback if the sheet hasn't been created yet
+  if (!sheet) return [["Error: Sync sheet not found. Run the 'Sync Full Log' button first."]];
+  
+  // Read all data from the synced sheet, skipping headers (Row 1)
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [["No data available in synced sheet."]];
+  
+  // The synced sheet structure is: [Timestamp (Date Obj), Action (String), Status (String)]
+  const logsToProcess = data.slice(1); 
+  
+  let sessions = []; // Format: [Date, Time IN, Time OUT, Duration]
+  let sessionStartTime = null; 
+  let sessionStartLog = null; 
+  let grandTotalDurationMs = 0; 
+  const tz = ss.getSpreadsheetTimeZone();
+
+  // Process logs looking for sequential IN/OUT cycles.
+  for (let i = 0; i < logsToProcess.length; i++) {
+    const timestamp = logsToProcess[i][0];
+    const action = logsToProcess[i][1];
+    
+    // Ensure timestamp is a valid date object (Sheets service converts ISO strings to Date objects automatically)
+    if (!(timestamp instanceof Date)) {
+      continue;
+    }
+
+    if (action === 'CLOCK_IN') {
+      // Start of a new work segment/block
+      sessionStartTime = timestamp;
+      sessionStartLog = timestamp; 
+    } else if (action === 'CLOCK_OUT') {
+      if (sessionStartTime && sessionStartLog) {
+        // Calculate work duration
+        const totalWorkDuration = timestamp.getTime() - sessionStartTime.getTime();
+        
+        grandTotalDurationMs += totalWorkDuration;
+
+        // Col 1: Date
+        const dateString = Utilities.formatDate(sessionStartLog, tz, 'MMM dd, yyyy');
+        // Col 2: Clock In Time
+        const timeIn = Utilities.formatDate(sessionStartLog, tz, 'HH:mm:ss');
+        // Col 3: Clock Out Time
+        const timeOut = Utilities.formatDate(timestamp, tz, 'HH:mm:ss');
+        // Col 4: Duration
+        const durationString = formatMsToDuration(totalWorkDuration);
+        
+        sessions.push([dateString, timeIn, timeOut, durationString]);
+      }
+      // Reset for the next cycle
+      sessionStartTime = null;
+      sessionStartLog = null;
+    }
+    // NOTE: This logic ignores break actions, as those would require tracking BREAK-IN/BREAK-OUT status, 
+    // and the core goal is to display the simple IN/OUT pairings from the raw log sheet.
+  }
+  
+  // --- Final Output Formatting ---
+  const reportHeaders = [["", "Date (Session)", "Time IN", "Time OUT", "Total Duration"]];
+  
+  if (sessions.length === 0) {
+    return reportHeaders.concat([["", "No completed IN/OUT sessions found in synced data.", "", "", ""]]);
+  }
+  
+  // 1. Map the 4-column session data back to the 5-column structure (adding the dummy empty column)
+  const sheetSessions = sessions.map(session => ["", ...session]);
+
+  // 2. Add Grand Total row at the bottom
+  //const totalDurationString = formatMsToDuration(grandTotalDurationMs);
+  //const totalRow = ["", "GRAND TOTAL", "", "", totalDurationString];
+  
+  //return reportHeaders.concat(sheetSessions, [totalRow]);
+  return reportHeaders.concat(sheetSessions);
+}
 
 // --- EXISTING REMINDER UTILITY FUNCTIONS (included for completeness) ---
 

@@ -2,8 +2,9 @@
 <html lang="en">
    <head>
       <meta charset="UTF-8">
-      <title>Hybrid Time & Task Dashboard</title>
+      <title>🧭 Hybrid Time & Task Dashboard</title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+     <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/4/4a/Clock_icon_simple.svg">
       <script src="https://cdn.tailwindcss.com"></script>
       <style>
          body {
@@ -175,7 +176,7 @@
                   <span id="total-break-time" class="font-mono loading-text loading-shimmer rounded">00:00:00</span>
                </div>
             </div>
-            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-cyan-800 hover:bg-cyan-900 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
+            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-indigo-300 hover:bg-indigo-300 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
             Mark All as Reported
             </button>
          </div>
@@ -207,14 +208,19 @@
                </div>
             </div>
          </div>
-         <div id="log-report-container" class="bg-white card rounded-xl p-6 mb-8">
-            <div class="flex justify-between items-center mb-4 no-print">
-               <h2 class="text-xl font-bold text-gray-700"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
-               <div class="flex space-x-2">
-                  <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
-                  Manage
-                  </button>
-                  <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
+<div id="log-report-container" class="bg-white card rounded-xl p-6 mb-8">
+    
+    <div class="mb-2 no-print"> 
+        <h2 class="text-xl font-bold text-gray-700"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
+    </div>
+
+    <div class="flex space-x-2 mb-4 no-print">
+        
+        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
+            Manage Log Events
+        </button>
+        
+        <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
                 class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold p-3 rounded-xl transition duration-150" 
                 title="Download Full Log History as CSV" 
                 style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
@@ -224,16 +230,17 @@
                 <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
         </button>
-                  <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
-                  Print
-                  </button>
-               </div>
-            </div>
-            <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-               <p class="text-center py-6 text-gray-500" id="history-loading">Awaiting session data...</p>
-            </div>
-            <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
-         </div>
+        
+        <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
+            Print Report
+        </button>
+    </div>
+    
+    <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+        <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
+    </div>
+    <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
+</div>
          <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
                <h3 id="message-title" class="text-xl font-bold mb-3 text-red-600">Alert</h3>
@@ -443,7 +450,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              // Break Status Pill & Button
              if (currentState.isUserOnBreak) {
                  breakStatusPill.textContent = 'ON BREAK';
-                 breakStatusPill.className = 'status-pill bg-yellow-100 text-yellow-700';
+                 breakStatusPill.className = 'status-pill bg-yellow-100 text-amber-700';
                  breakToggleBtn.textContent = 'Break END';
                  breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
                  breakToggleBtn.disabled = !currentState.isClockedIn;
@@ -1382,7 +1389,7 @@ window.syncRawLogsToSheet = function() {
         return;
     }
 
-    // 1. Filter to ensure we only process valid log objects.
+    // 1. Filter to ensure we only process log objects with timestamps and types (which includes REPORTED)
     const validRawLogs = rawLogEvents.filter(log => log.timestamp && log.type); 
 
     if (validRawLogs.length === 0) {
@@ -1393,10 +1400,11 @@ window.syncRawLogsToSheet = function() {
     // 2. Map the data, enforcing all values are simple strings for serialization safety.
     const simpleLogsArray = validRawLogs.map(log => {
         // Guarantee simple string conversion for the final array structure: [Timestamp, Type, Status]
+        // NOTE: The 'REPORTED' entry's metadata is stored in the 'Status' field, so we must include it.
         return [
             String(log.timestamp) || 'CORRUPT_TIMESTAMP',
             String(log.type) || 'ACTION_MISSING',
-            ''
+            String(log.status || '') // Ensure the status (metadata) is included if it exists
         ];
     }).reverse(); // Reverse the order to show oldest logs first in the Sheet
 
@@ -1405,7 +1413,7 @@ window.syncRawLogsToSheet = function() {
 
     showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
 
-    // Call the correct GAS function with the final name
+    // Call the correct GAS function
     google.script.run
         .withSuccessHandler(() => {
             showMessage("Sync Complete", `Successfully synced ${simpleLogsArray.length} log entries to the spreadsheet.`, false);
