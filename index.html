@@ -522,7 +522,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          // ✅ Buttons stack vertically on mobile (flex-col), horizontal on desktop (sm:flex-row)
          // ✅ space-y-1 for vertical spacing, sm:space-x-2 for horizontal spacing
          // 👇 Using w-full for full width on mobile helps alignment
-         buttonContainer.className = 'flex-shrink-0 flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-2 w-full sm:w-auto justify-end';
+		buttonContainer.className = 'flex-shrink-0 flex flex-row space-y-0 sm:space-y-0 space-x-2 w-full sm:w-auto justify-end';         
          
          const completeBtn = document.createElement('button');
          // ✅ active:scale-95 for touch feedback
