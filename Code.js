@@ -825,7 +825,7 @@ function getReportData() {
 
 /**
  * Utility function to convert the report data duration from milliseconds.
- * (This function already exists in Code.js but is included for context)
+ * (This function is required by the main function)
  * @param {number} totalMilliseconds The duration in milliseconds.
  * @returns {string} The duration formatted as HH:mm:ss.
  */
@@ -841,36 +841,58 @@ function formatMsToDuration(totalMilliseconds) {
 
 /**
  * Custom function that reads the raw data from the 'Time Logs Report (Raw Sync)' 
- * sheet and calculates the final work sessions and total time.
- * * @returns {Array<Array<any>>} A two-dimensional array of report data (5 columns).
+ * sheet and calculates the final work sessions and total time between two timestamps.
+ * * @param {Date|null} startTime The start timestamp (e.g., from a spreadsheet cell).
+ * @param {Date|null} endTime The end timestamp (e.g., from a spreadsheet cell).
+ * @returns {Array<Array<any>>} A two-dimensional array of report data (5 columns).
  */
-function calculateReportFromSyncedLogs(dummy) {
+function calculateReportFromSyncedLogs(startTime, endTime, dummy) {
   const SYNC_SHEET_NAME = "Time Logs Report (Raw Sync)";
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SYNC_SHEET_NAME);
+  const tz = ss.getSpreadsheetTimeZone();
   
   // Fallback if the sheet hasn't been created yet
   if (!sheet) return [["Error: Sync sheet not found. Run the 'Sync Full Log' button first."]];
   
+  // 1. Establish the filter boundaries
+  // Use 0 (start of time) if startTime is null, and Now if endTime is null.
+  let startFilterTimeMs = (startTime instanceof Date) ? startTime.getTime() : 0;
+  let endFilterTimeMs = (endTime instanceof Date) ? endTime.getTime() : new Date().getTime();
+
+  // Ensure start time is not greater than end time (swap if needed)
+  if (startFilterTimeMs > endFilterTimeMs) {
+      [startFilterTimeMs, endFilterTimeMs] = [endFilterTimeMs, startFilterTimeMs];
+  }
+  
   // Read all data from the synced sheet, skipping headers (Row 1)
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [["No data available in synced sheet."]];
-  
-  // The synced sheet structure is: [Timestamp (Date Obj), Action (String), Status (String)]
-  const logsToProcess = data.slice(1); 
+
+  // 2. Filter the raw data based on the time window
+  const logsToProcess = data.slice(1).filter(row => {
+      const timestamp = row[0];
+      
+      // Ensure the timestamp is a valid Date object for comparison
+      if (!(timestamp instanceof Date) || isNaN(timestamp.getTime())) {
+          return false;
+      }
+      
+      const timeMs = timestamp.getTime();
+      return timeMs >= startFilterTimeMs && timeMs <= endFilterTimeMs;
+  });
   
   let sessions = []; // Format: [Date, Time IN, Time OUT, Duration]
   let sessionStartTime = null; 
   let sessionStartLog = null; 
   let grandTotalDurationMs = 0; 
-  const tz = ss.getSpreadsheetTimeZone();
-
-  // Process logs looking for sequential IN/OUT cycles.
+  
+  // 3. Process logs looking for sequential IN/OUT cycles within the filtered data
   for (let i = 0; i < logsToProcess.length; i++) {
     const timestamp = logsToProcess[i][0];
     const action = logsToProcess[i][1];
     
-    // Ensure timestamp is a valid date object (Sheets service converts ISO strings to Date objects automatically)
+    // Ensure timestamp is a valid date object (filtered above, but for safety)
     if (!(timestamp instanceof Date)) {
       continue;
     }
@@ -901,8 +923,7 @@ function calculateReportFromSyncedLogs(dummy) {
       sessionStartTime = null;
       sessionStartLog = null;
     }
-    // NOTE: This logic ignores break actions, as those would require tracking BREAK-IN/BREAK-OUT status, 
-    // and the core goal is to display the simple IN/OUT pairings from the raw log sheet.
+    // NOTE: This logic ignores break actions, as per the reverted version.
   }
   
   // --- Final Output Formatting ---
@@ -915,11 +936,7 @@ function calculateReportFromSyncedLogs(dummy) {
   // 1. Map the 4-column session data back to the 5-column structure (adding the dummy empty column)
   const sheetSessions = sessions.map(session => ["", ...session]);
 
-  // 2. Add Grand Total row at the bottom
-  //const totalDurationString = formatMsToDuration(grandTotalDurationMs);
-  //const totalRow = ["", "GRAND TOTAL", "", "", totalDurationString];
-  
-  //return reportHeaders.concat(sheetSessions, [totalRow]);
+  // 2. Return headers and sessions (Grand Total removed as requested previously)
   return reportHeaders.concat(sheetSessions);
 }
 
