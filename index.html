@@ -128,7 +128,6 @@
          <header class="text-center mb-6 no-print">
             <h1 class="text-3xl font-extrabold text-gray-900 mb-2">Hybrid Time & Task Dashboard</h1>
             <p class="text-xs text-gray-500 mb-4 break-words">Session User ID: <span id="user-id-display" class="font-mono text-xs loading-text loading-shimmer rounded">Initializing user...</span></p>
-            <p class="text-md font-semibold text-indigo-600">✅ ALL DATA IS NOW FULLY SYNCHRONIZED ACROSS YOUR DEVICES.</p>
          </header>
          <div id="login-container" class="bg-red-100 card rounded-xl p-6 mb-8 hidden">
             <h2 class="text-xl font-bold text-red-700 mb-4">Access Required</h2>
@@ -891,21 +890,23 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              }
          }
          
-         window.handleDeleteEvent = async function() {
-             // NOTE: Using a custom modal instead of window.confirm
-             if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
-                 return;
-             }
-             
-             try {
-                 const logRef = doc(db, getTimeLogCollectionRef().path, logId);
-                 await deleteDoc(logRef);
-                 showMessage("Log Deleted", `Successfully deleted log event: ${logType}`, false);
-             } catch (e) {
-                 console.error("Error deleting log event:", e);
-                 showMessage("Delete Failed", `Failed to delete log event. Error: ${e.message}`, true);
-             }
-         }
+
+	window.handleDeleteEvent = async function(logId, logType) { // 🟢 FIX: logType must be defined here
+    // The alert uses logType to confirm the deletion (prevents the ReferenceError)
+    if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
+        return;
+    }
+    
+    try {
+        const logRef = doc(db, getTimeLogCollectionRef().path, logId);
+        await deleteDoc(logRef);
+        // Uses the logType argument for the success message
+        showMessage("Log Deleted", `Successfully deleted log event: ${logType}`, false); 
+    } catch (e) {
+        console.error("Error deleting log event:", e);
+        showMessage("Delete Failed", `Failed to delete log event. Error: ${e.message}`, true);
+    }
+}
          
          // --- Firestore Path Functions (ALL PUBLIC/SHARED) ---
          

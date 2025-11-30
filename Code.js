@@ -20,15 +20,14 @@ const DEFAULT_LIST_JSON = JSON.stringify([
  */
 function doGet() {
   // 1. Get the content of the HTML file
-  const htmlOutput = HtmlService.createHtmlOutputFromFile('Index'); // Use 'Index' (or your file name)
+  const htmlOutput = HtmlService.createHtmlOutputFromFile('Index'); 
 
   // 2. Set the necessary parameters for embedding and responsive design
   htmlOutput.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   htmlOutput.setSandboxMode(HtmlService.SandboxMode.IFRAME);
 
-  // Set initial dimensions (GAS often defaults to a small size if not set)
-  htmlOutput.setWidth(1000); 
-  htmlOutput.setHeight(800);
+  // REMOVED: htmlOutput.setWidth(1000); 
+  // REMOVED: htmlOutput.setHeight(800);
 
   return htmlOutput;
 }
@@ -927,7 +926,7 @@ function calculateReportFromSyncedLogs(startTime, endTime, dummy) {
   }
   
   // --- Final Output Formatting ---
-  const reportHeaders = [["", "Date (Session)", "Time IN", "Time OUT", "Total Duration"]];
+  const reportHeaders = [["", "Date", "Time IN", "Time OUT", "Total Duration"]];
   
   if (sessions.length === 0) {
     return reportHeaders.concat([["", "No completed IN/OUT sessions found in synced data.", "", "", ""]]);
