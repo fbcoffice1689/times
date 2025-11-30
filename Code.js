@@ -21,16 +21,13 @@ const DEFAULT_LIST_JSON = JSON.stringify([
 function doGet() {
   // 1. Get the content of the HTML file
   const htmlOutput = HtmlService.createHtmlOutputFromFile('Index'); 
-
+	htmlOutput.setViewport('width=device-width, initial-scale=1.0');
   // 2. Set the necessary parameters for embedding and responsive design
   htmlOutput.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   htmlOutput.setSandboxMode(HtmlService.SandboxMode.IFRAME);
 
-  // REMOVED: htmlOutput.setWidth(1000); 
-  // REMOVED: htmlOutput.setHeight(800);
-
   return htmlOutput;
-}
+}  
 
 // --- Code.gs file ---
 
