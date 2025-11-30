@@ -506,7 +506,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              const dueDateSpan = document.createElement('span');
              const dateObj = new Date(task.dueDate + 'T00:00:00');
              // 👇 DUE DATE: Enlarged to text-sm on mobile (was text-xs before)
-             dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+             dueDateSpan.className = `text-lg mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
              dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
              textContainer.appendChild(dueDateSpan);
          }
@@ -527,14 +527,14 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          const completeBtn = document.createElement('button');
          // ✅ active:scale-95 for touch feedback
          // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         completeBtn.className = `flex-shrink-0 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
+         completeBtn.className = `w-2/5 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
          completeBtn.textContent = completed ? 'Undo' : ' ✔️ Done ';
          completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
          
          const deleteBtn = document.createElement('button');
          // ✅ active:scale-95 for touch feedback
          // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         deleteBtn.className = 'flex-shrink-0 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
+         deleteBtn.className = 'w-1/5 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
          deleteBtn.textContent = ' 𝘟 ';
          deleteBtn.onclick = () => deleteTask(task.id);
          
