@@ -498,7 +498,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          
          const textSpan = document.createElement('span');
          // 👇 MAIN TASK TEXT: Enlarged to text-sm on mobile, bumps to text-base on screens >= sm
-         textSpan.className = `text-base sm:text-base font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
+         textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
          textSpan.textContent = task.text;
          textContainer.appendChild(textSpan);
          
@@ -506,7 +506,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              const dueDateSpan = document.createElement('span');
              const dateObj = new Date(task.dueDate + 'T00:00:00');
              // 👇 DUE DATE: Enlarged to text-sm on mobile (was text-xs before)
-             dueDateSpan.className = `text-lg mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+             dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
              dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
              textContainer.appendChild(dueDateSpan);
          }
