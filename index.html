@@ -466,7 +466,17 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          function renderTasks() {
          tasksListEl.innerHTML = '';
          
-         currentState.tasks.sort((a, b) => {
+         // Filter tasks: show only those due within 2 weeks or with no due date
+         const twoWeeksFromNow = new Date();
+         twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+         
+         const filteredTasks = currentState.tasks.filter(task => {
+             if (!task.dueDate) return true; // Show tasks with no due date
+             const dueDate = new Date(task.dueDate + 'T00:00:00');
+             return dueDate <= twoWeeksFromNow; // Show only if due within 2 weeks
+         });
+         
+         filteredTasks.sort((a, b) => {
          if (a.isCompleted !== b.isCompleted) {
              return a.isCompleted ? 1 : -1; 
          }
@@ -475,9 +485,9 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
          return timeB - timeA; 
          });
          
-         if (currentState.tasks.length === 0) {
+         if (filteredTasks.length === 0) {
          // ✅ Responsive text size (text-sm)
-         tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No shared tasks have been added yet.</p>';
+         tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
          return;
          }
          
@@ -729,7 +739,7 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              
              printHeaderContainer.innerHTML = `
                  <h1 class="text-xl font-bold mb-1">Time Log Report (${startDateFormatted} - ${endDateFormatted})</h1>
-                 <p class="text-sm">User ID: ${userId}</p>
+                 <p class="text-sm">Rosemary E. Pyles</p>
                  <p class="text-sm font-bold mt-2">TOTAL WORKED: ${netWorkTimeFormatted}</p>
                  <p class="text-xs">Reported Since: ${lastReportedDateEl.textContent}</p>
              `;
