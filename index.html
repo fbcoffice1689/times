@@ -460,104 +460,122 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              }
          }
          
-         // ========================================
-         // NEW VERSION (Mobile & Desktop Optimized)
-         // ========================================
-         function renderTasks() {
-         tasksListEl.innerHTML = '';
-         
-         // Filter tasks: show only those due within 2 weeks or with no due date
-         const twoWeeksFromNow = new Date();
-         twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
-         
-         const filteredTasks = currentState.tasks.filter(task => {
-             if (!task.dueDate) return true; // Show tasks with no due date
-             const dueDate = new Date(task.dueDate + 'T00:00:00');
-             return dueDate <= twoWeeksFromNow; // Show only if due within 2 weeks
-         });
-         
-         filteredTasks.sort((a, b) => {
-         if (a.isCompleted !== b.isCompleted) {
-             return a.isCompleted ? 1 : -1; 
-         }
-         const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date().getTime();
-         const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date().getTime();
-         return timeB - timeA; 
-         });
-         
-         if (filteredTasks.length === 0) {
-         // ✅ Responsive text size (text-sm)
-         tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
-         return;
-         }
-         
-         currentState.tasks.forEach((task) => {
-         const item = document.createElement('div');
-         const completed = task.isCompleted;
-         
-         const itemClasses = completed 
-             // ✅ items-start: aligns items at top, works better when buttons stack
-             // ✅ NO justify-between: allows natural flow on mobile
-             ? 'task-item bg-gray-200 rounded-lg flex items-start border-green-500'
-             : 'task-item bg-white hover:bg-indigo-50 rounded-lg flex items-start border-indigo-500';
-         
-         item.className = itemClasses;
-         
-         const textContainer = document.createElement('div');
-         textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
-         
-         const textSpan = document.createElement('span');
-         // 👇 MAIN TASK TEXT: Enlarged to text-sm on mobile, bumps to text-base on screens >= sm
-         textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
-         textSpan.textContent = task.text;
-         textContainer.appendChild(textSpan);
-         
-         if (task.dueDate) {
-             const dueDateSpan = document.createElement('span');
-             const dateObj = new Date(task.dueDate + 'T00:00:00');
-             // 👇 DUE DATE: Enlarged to text-sm on mobile (was text-xs before)
-             dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
-             dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
-             textContainer.appendChild(dueDateSpan);
-         }
-         
-         const creatorInfo = document.createElement('div');
-         // 👇 CREATOR INFO: Explicitly set to the smallest size (text-xs) and left alone
-         //    This ensures it stays small even if the parent container's font size is forced larger.
-         creatorInfo.className = 'text-xs mt-0.5 text-gray-500';
-         creatorInfo.textContent = `By: ${task.ownerId ? task.ownerId.substring(0, 8) + '...' : 'Unknown'}`;
-         textContainer.appendChild(creatorInfo);
-         
-         const buttonContainer = document.createElement('div');
-         // ✅ Buttons stack vertically on mobile (flex-col), horizontal on desktop (sm:flex-row)
-         // ✅ space-y-1 for vertical spacing, sm:space-x-2 for horizontal spacing
-         // 👇 Using w-full for full width on mobile helps alignment
-		buttonContainer.className = 'flex-shrink-0 flex flex-row space-y-0 sm:space-y-0 space-x-2 w-full sm:w-auto justify-end';         
-         
-         const completeBtn = document.createElement('button');
-         // ✅ active:scale-95 for touch feedback
-         // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         completeBtn.className = `w-2/5 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
-         completeBtn.textContent = completed ? 'Undo' : ' ✔️ Done ';
-         completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
-         
-         const deleteBtn = document.createElement('button');
-         // ✅ active:scale-95 for touch feedback
-         // ✅ Responsive padding: px-2 sm:px-3, py-1.5 sm:py-1
-         deleteBtn.className = 'w-1/5 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
-         deleteBtn.textContent = ' 𝘟 ';
-         deleteBtn.onclick = () => deleteTask(task.id);
-         
-         buttonContainer.appendChild(completeBtn);
-         buttonContainer.appendChild(deleteBtn);
-         
-         item.appendChild(textContainer);
-         item.appendChild(buttonContainer);
-         tasksListEl.appendChild(item);
-         });
-         }
-         // ========================================
-         
+// ========================================
+// NEW VERSION (Mobile & Desktop Optimized)
+// ========================================
+function renderTasks() {
+    tasksListEl.innerHTML = '';
+
+    // --- 1. Date Filtering Logic ---
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Set to start of today
+    const twoWeeksFromNow = new Date(now);
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+
+    console.log('Today:', now);
+    console.log('Two weeks from now:', twoWeeksFromNow);
+
+    const filteredTasks = currentState.tasks.filter(task => {
+        if (!task.dueDate) return true; // Show tasks with no due date
+        
+        // Ensure due date is compared at the start of the day
+        const dueDate = new Date(task.dueDate + 'T00:00:00');
+        dueDate.setHours(0, 0, 0, 0); // Normalize to start of day
+
+        console.log('Task:', task.text, 'Due:', dueDate, 'In range?', (dueDate >= now && dueDate <= twoWeeksFromNow));
+
+        // Show only if due between today (inclusive) and 2 weeks from now (inclusive)
+        return dueDate >= now && dueDate <= twoWeeksFromNow; 
+    });
+
+    // --- 2. Sorting Logic ---
+    filteredTasks.sort((a, b) => {
+        // Completed tasks go to the bottom
+        if (a.isCompleted !== b.isCompleted) {
+            return a.isCompleted ? 1 : -1;
+        }
+        // Otherwise, sort by creation time (newest first)
+        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date().getTime();
+        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date().getTime();
+        return timeB - timeA;
+    });
+
+    // --- 3. Empty State Check ---
+    if (filteredTasks.length === 0) {
+        // ✅ Responsive text size (text-sm)
+        tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
+        return;
+    }
+
+    // --- 4. Rendering the Filtered Tasks ---
+    // 👇 CRUCIAL FIX: Loop over the filteredTasks array
+    filteredTasks.forEach((task) => { 
+        const item = document.createElement('div');
+        const completed = task.isCompleted;
+
+        // --- Item Styling ---
+        const itemClasses = completed
+            // ✅ items-start: aligns items at top, works better when buttons stack
+            ? 'task-item bg-gray-200 rounded-lg flex items-start border-green-500 p-4 mb-3 shadow-sm'
+            : 'task-item bg-white hover:bg-indigo-50 rounded-lg flex items-start border-indigo-500 p-4 mb-3 shadow-md';
+
+        item.className = itemClasses;
+
+        // --- Text Container (Task Text, Due Date, Creator) ---
+        const textContainer = document.createElement('div');
+        textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
+
+        const textSpan = document.createElement('span');
+        // 👇 MAIN TASK TEXT: text-lg on mobile, text-lg on screens >= sm
+        textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
+        textSpan.textContent = task.text;
+        textContainer.appendChild(textSpan);
+
+        if (task.dueDate) {
+            const dueDateSpan = document.createElement('span');
+            const dateObj = new Date(task.dueDate + 'T00:00:00');
+            // 👇 DUE DATE: text-base on mobile
+            dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+            dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
+            textContainer.appendChild(dueDateSpan);
+        }
+
+        const creatorInfo = document.createElement('div');
+        // 👇 CREATOR INFO: Explicitly set to the smallest size (text-xs)
+        creatorInfo.className = 'text-xs mt-0.5 text-gray-500';
+        creatorInfo.textContent = `By: ${task.ownerId ? task.ownerId.substring(0, 8) + '...' : 'Unknown'}`;
+        textContainer.appendChild(creatorInfo);
+
+        // --- Button Container ---
+        const buttonContainer = document.createElement('div');
+        // ✅ Buttons side-by-side on all screens. Removed flex-col/flex-row toggle for simplicity/modern UI.
+        buttonContainer.className = 'flex-shrink-0 flex flex-row space-x-2 w-full sm:w-auto justify-end mt-2 sm:mt-0';
+
+        // --- Complete Button ---
+        const completeBtn = document.createElement('button');
+        // ✅ active:scale-95 for touch feedback
+        completeBtn.className = `w-3/5 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
+        completeBtn.textContent = completed ? 'Undo' : ' ✔️ Done ';
+        // Retain functionality
+        completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
+
+        // --- Delete Button ---
+        const deleteBtn = document.createElement('button');
+        // ✅ active:scale-95 for touch feedback
+        deleteBtn.className = 'w-2/5 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
+        deleteBtn.textContent = ' 𝘟 ';
+        // Retain functionality
+        deleteBtn.onclick = () => deleteTask(task.id);
+
+        buttonContainer.appendChild(completeBtn);
+        buttonContainer.appendChild(deleteBtn);
+
+        // --- Final Assembly ---
+        item.appendChild(textContainer);
+        item.appendChild(buttonContainer);
+        tasksListEl.appendChild(item);
+    });
+}         
          
          /**
           * Calculates total time and generates segments (spans) of work/break.
