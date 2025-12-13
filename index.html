@@ -779,18 +779,17 @@ function renderTasks() {
              table.className = 'print-table text-left w-full text-sm';
              
              table.innerHTML = `
-                 <thead class="bg-gray-200">
-                     <tr>
-                         <th class="p-2">Date</th>
-                         <th class="p-2">Activity</th>
-                         <th class="p-2">Start Time</th>
-                         <th class="p-2">End Time</th>
-                         <th class="p-2 text-right">Duration</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                 </tbody>
-             `;
+                 <thead class="bg-gray-200">
+                     <tr>
+                         <th class="p-2">Date</th>
+                         <th class="p-2">Start Time</th>
+                         <th class="p-2">End Time</th>
+                         <th class="p-2 text-right">Duration</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                 </tbody>
+             `;
              const tbody = table.querySelector('tbody');
          
              segments.forEach(segment => {
@@ -827,13 +826,12 @@ function renderTasks() {
                       row.classList.add('bg-red-100'); // Highlight the error row
                  }
          
-                 row.innerHTML = `
-                     <td class="p-2 text-gray-700">${date}</td>
-                     <td class="p-2 font-semibold ${colorClass}">${activityText}</td>
-                     <td class="p-2 text-gray-600">${startTime}</td>
-                     <td class="p-2 text-gray-600">${endTime}</td>
-                     <td class="p-2 text-right">${durationDisplay}</td>
-                 `;
+                row.innerHTML = `
+                     <td class="p-2 text-gray-700">${date}</td>
+                     <td class="p-2 text-gray-600">${startTime}</td>
+                     <td class="p-2 text-gray-600">${endTime}</td>
+                     <td class="p-2 text-right">${durationDisplay}</td>
+                 `;
              });
              
              logHistoryListEl.appendChild(table);
