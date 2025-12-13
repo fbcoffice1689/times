@@ -1,788 +1,788 @@
 <!DOCTYPE html>
 <html lang="en">
-   <head>
-      <meta charset="UTF-8">
-      <title>🧭 Hybrid Time & Task Dashboard</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-     <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/4/4a/Clock_icon_simple.svg">
-      <script src="https://cdn.tailwindcss.com"></script>
-      <style>
-         body {
-         font-family: 'Inter', sans-serif;
-         background-color: #f0f4f8; /* Light background */
-         }
-         .card {
-         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-         transition: transform 0.2s;
-         }
-         .task-item {
-         padding: 12px;
-         border-left-width: 4px; 
-         transition: background-color 0.15s ease;
-         }
-         .status-pill {
-         display: inline-flex;
-         align-items: center;
-         padding: 4px 10px;
-         border-radius: 9999px;
-         font-size: 0.875rem;
-         font-weight: 600;
-         }
-         /* Custom styles for loading state */
-         .loading-shimmer {
-         background: #e0e0e0;
-         background-image: linear-gradient(to right, #e0e0e0 0%, #f5f5f5 20%, #e0e0e0 40%, #e0e0e0 100%);
-         background-repeat: no-repeat;
-         background-size: 800px 104px; 
-         animation-duration: 1.5s;
-         animation-fill-mode: forwards; 
-         animation-iteration-count: infinite;
-         animation-name: shimmer;
-         animation-timing-function: linear;
-         }
-         @keyframes shimmer {
-         0% { background-position: -468px 0; }
-         100% { background-position: 468px 0; }
-         }
-         .loading-text { color: transparent; }
-         /* Mobile optimizations */
-         @media (max-width: 640px) {
-         /* ❗ FIX: Force max-width of container to 100% on small screens */
-         #app-container {
-         max-width: 100% !important;
-         }
-         .status-pill {
-         font-size: 0.75rem;
-         padding: 3px 8px;
-         }
-         .task-item {
-         padding: 10px;
-         /* Ensure vertical stacking and alignment on small screens */
-         flex-direction: column;
-         align-items: flex-start !important;
-         }
-         .task-item > div:last-child {
-         margin-top: 8px;
-         width: 100%; /* Forces button container to full width */
-         justify-content: flex-end;
-         }
-         button {
-         min-height: 44px; /* Touch-friendly size */
-         }
-         }
-         /* FIX FOR PRINTING: 
-         * Ensure only the report is visible and formatted for print.
-         */
-         @media print {
-         .no-print {
-         display: none !important;
-         }
-         #log-history-list {
-         max-height: none !important; /* Allows the content to expand fully */
-         overflow: visible !important; /* Disables the scrollbar */
-         border: none !important;      /* Removes the border from the printout */
-         padding: 0 !important;        /* Removes the padding from the printout */
-         }
-         #log-report-container {
-         position: absolute;
-         left: 0;
-         top: 0;
-         width: 100%;
-         margin: 0;
-         padding: 20px;
-         box-shadow: none; 
-         page-break-after: always; 
-         }
-         .print-header {
-         display: block !important; /* <--- This overrides the 'hidden' class during print */
-         text-align: center;
-         margin-bottom: 20px;
-         padding-bottom: 10px;
-         border-bottom: 2px solid #374151; /* Dark line under header */
-         }
-         .print-table {
-         width: 100%;
-         border-collapse: collapse;
-         margin-top: 15px;
-         }
-         .print-table th, .print-table td {
-         border: 1px solid #ccc;
-         padding: 8px;
-         text-align: left;
-         }
-         .print-table th {
-         background-color: #f3f4f6;
-         }
-         /* Ensure the main app container is not hidden */
-         #app-container {
-         width: 100% !important;
-         max-width: none !important;
-         }
-         }
-      </style>
-   </head>
-   <body class="py-4 px-0 sm:p-8 min-h-screen flex items-start justify-center">
-      <div id="app-container" class="w-full max-w-4xl lg:max-6xl">
-         <header class="text-center mb-6 no-print">
-            <h1 class="text-3xl font-extrabold text-gray-900 mb-2">Hybrid Time & Task Dashboard</h1>
-            <p class="text-xs text-gray-500 mb-4 break-words">Session User ID: <span id="user-id-display" class="font-mono text-xs loading-text loading-shimmer rounded">Initializing user...</span></p>
-         </header>
-         <div id="login-container" class="bg-red-100 card rounded-xl p-6 mb-8 hidden">
-            <h2 class="text-xl font-bold text-red-700 mb-4">Access Required</h2>
-            <p class="mb-4 text-red-600">Please sign in with your authorized Google account to use this application.</p>
-            <button id="google-sign-in-btn" onclick="handleGoogleSignIn()" class="w-full py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition duration-200">
-            Sign In with Google
-            </button>
-         </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
-            <h2 class="text-xl font-bold mb-4 text-gray-700">Current Status (Synced)</h2>
-            <div id="status-display" class="space-y-3">
-               <p class="flex justify-between items-center text-sm font-medium">
-                  Clock Status:
-                  <span id="clock-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
-               </p>
-               <p class="flex justify-between items-center text-sm font-medium">
-                  Break Status:
-                  <span id="break-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
-               </p>
-            </div>
-         </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 flex flex-col space-y-4 no-print">
-            <h2 class="text-xl font-bold mb-2 text-gray-700">Quick Actions</h2>
-            <button id="clock-toggle-btn" 
-               onclick="handleClockToggle()" 
-               class="w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50" disabled>
-            Initializing...
-            </button>
-            <button id="break-toggle-btn" 
-               onclick="handleBreakToggle()" 
-               class="w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50" disabled>
-            Initializing...
-            </button>
-         </div>
-         <div class="bg-indigo-700 card rounded-xl p-6 mb-8 text-white no-print">
-            <h2 class="text-xl font-bold mb-2">Unreported Time Summary (Synced)</h2>
-            <p id="report-since" class="text-sm opacity-75 mb-4">Last reported: <span id="last-reported-date" class="font-semibold loading-text loading-shimmer rounded">Loading date...</span></p>
-            <div class="flex flex-col space-y-2 mb-4">
-               <div class="flex justify-between items-center text-lg font-bold">
-                  <span>Work Time:</span>
-                  <span id="total-work-time" class="font-mono text-xl loading-text loading-shimmer rounded">00:00:00</span>
-               </div>
-               <div class="flex justify-between items-center text-sm">
-                  <span>Break Time:</span>
-                  <span id="total-break-time" class="font-mono loading-text loading-shimmer rounded">00:00:00</span>
-               </div>
-            </div>
-            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-indigo-300 hover:bg-indigo-300 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
-            Mark All as Reported
-            </button>
-         </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
-            <h2 class="text-xl font-bold mb-4 text-gray-700">Priority Tasks (Synced)</h2>
-            <p class="text-xs text-gray-500 mb-4">This task list is synchronized across all your devices.</p>
-            <div id="unfinished-tasks-list" class="space-y-2 mb-4">
-               <p class="text-center py-6 text-gray-500" id="task-loading">Awaiting database connection...</p>
-            </div>
-            <div class="border-t pt-4 mt-4">
-               <h3 class="text-lg font-semibold text-gray-700 mb-3">Add New Task</h3>
-               <div class="flex space-x-2 mb-2">
-                  <input type="text" id="new-task-text" placeholder="Task Description (e.g., Email Bob)" class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-                  <button id="calendar-toggle-btn" onclick="handleCalendarClick()" class="flex-shrink-0 p-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition duration-150" title="Toggle Due Date">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar">
-                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                        <line x1="16" x2="16" y1="2" y2="6"/>
-                        <line x1="8" x2="8" y1="2" y2="6"/>
-                        <line x1="3" x2="21" y1="10" y2="10"/>
-                     </svg>
-                  </button>
-                  <button id="add-task-btn" onclick="handleAddTask()" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
-                  Add
-                  </button>
-               </div>
-               <div id="due-date-container" class="mt-3 hidden">
-                  <label for="new-due-date" class="text-sm font-medium text-gray-600">Select Due Date (Optional):</label>
-                  <input type="date" id="new-due-date" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-               </div>
-            </div>
-         </div>
+   <head>
+      <meta charset="UTF-8">
+      <title>🧭 Hybrid Time & Task Dashboard</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+     <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/4/4a/Clock_icon_simple.svg">
+      <script src="https://cdn.tailwindcss.com"></script>
+      <style>
+         body {
+         font-family: 'Inter', sans-serif;
+         background-color: #f0f4f8; /* Light background */
+         }
+         .card {
+         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+         transition: transform 0.2s;
+         }
+         .task-item {
+         padding: 12px;
+         border-left-width: 4px; 
+         transition: background-color 0.15s ease;
+         }
+         .status-pill {
+         display: inline-flex;
+         align-items: center;
+         padding: 4px 10px;
+         border-radius: 9999px;
+         font-size: 0.875rem;
+         font-weight: 600;
+         }
+         /* Custom styles for loading state */
+         .loading-shimmer {
+         background: #e0e0e0;
+         background-image: linear-gradient(to right, #e0e0e0 0%, #f5f5f5 20%, #e0e0e0 40%, #e0e0e0 100%);
+         background-repeat: no-repeat;
+         background-size: 800px 104px; 
+         animation-duration: 1.5s;
+         animation-fill-mode: forwards; 
+         animation-iteration-count: infinite;
+         animation-name: shimmer;
+         animation-timing-function: linear;
+         }
+         @keyframes shimmer {
+         0% { background-position: -468px 0; }
+         100% { background-position: 468px 0; }
+         }
+         .loading-text { color: transparent; }
+         /* Mobile optimizations */
+         @media (max-width: 640px) {
+         /* ❗ FIX: Force max-width of container to 100% on small screens */
+         #app-container {
+         max-width: 100% !important;
+         }
+         .status-pill {
+         font-size: 0.75rem;
+         padding: 3px 8px;
+         }
+         .task-item {
+         padding: 10px;
+         /* Ensure vertical stacking and alignment on small screens */
+         flex-direction: column;
+         align-items: flex-start !important;
+         }
+         .task-item > div:last-child {
+         margin-top: 8px;
+         width: 100%; /* Forces button container to full width */
+         justify-content: flex-end;
+         }
+         button {
+         min-height: 44px; /* Touch-friendly size */
+         }
+         }
+         /* FIX FOR PRINTING: 
+         * Ensure only the report is visible and formatted for print.
+         */
+         @media print {
+         .no-print {
+         display: none !important;
+         }
+         #log-history-list {
+         max-height: none !important; /* Allows the content to expand fully */
+         overflow: visible !important; /* Disables the scrollbar */
+         border: none !important;      /* Removes the border from the printout */
+         padding: 0 !important;        /* Removes the padding from the printout */
+         }
+         #log-report-container {
+         position: absolute;
+         left: 0;
+         top: 0;
+         width: 100%;
+         margin: 0;
+         padding: 20px;
+         box-shadow: none; 
+         page-break-after: always; 
+         }
+         .print-header {
+         display: block !important; /* <--- This overrides the 'hidden' class during print */
+         text-align: center;
+         margin-bottom: 20px;
+         padding-bottom: 10px;
+         border-bottom: 2px solid #374151; /* Dark line under header */
+         }
+         .print-table {
+         width: 100%;
+         border-collapse: collapse;
+         margin-top: 15px;
+         }
+         .print-table th, .print-table td {
+         border: 1px solid #ccc;
+         padding: 8px;
+         text-align: left;
+         }
+         .print-table th {
+         background-color: #f3f4f6;
+         }
+         /* Ensure the main app container is not hidden */
+         #app-container {
+         width: 100% !important;
+         max-width: none !important;
+         }
+         }
+      </style>
+   </head>
+   <body class="py-4 px-0 sm:p-8 min-h-screen flex items-start justify-center">
+      <div id="app-container" class="w-full max-w-4xl lg:max-6xl">
+         <header class="text-center mb-6 no-print">
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-2">Hybrid Time & Task Dashboard</h1>
+            <p class="text-xs text-gray-500 mb-4 break-words">Session User ID: <span id="user-id-display" class="font-mono text-xs loading-text loading-shimmer rounded">Initializing user...</span></p>
+         </header>
+         <div id="login-container" class="bg-red-100 card rounded-xl p-6 mb-8 hidden">
+            <h2 class="text-xl font-bold text-red-700 mb-4">Access Required</h2>
+            <p class="mb-4 text-red-600">Please sign in with your authorized Google account to use this application.</p>
+            <button id="google-sign-in-btn" onclick="handleGoogleSignIn()" class="w-full py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition duration-200">
+            Sign In with Google
+            </button>
+         </div>
+         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
+            <h2 class="text-xl font-bold mb-4 text-gray-700">Current Status (Synced)</h2>
+            <div id="status-display" class="space-y-3">
+               <p class="flex justify-between items-center text-sm font-medium">
+                  Clock Status:
+                  <span id="clock-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
+               </p>
+               <p class="flex justify-between items-center text-sm font-medium">
+                  Break Status:
+                  <span id="break-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
+               </p>
+            </div>
+         </div>
+         <div class="bg-white card rounded-xl p-6 mb-8 flex flex-col space-y-4 no-print">
+            <h2 class="text-xl font-bold mb-2 text-gray-700">Quick Actions</h2>
+            <button id="clock-toggle-btn" 
+               onclick="handleClockToggle()" 
+               class="w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50" disabled>
+            Initializing...
+            </button>
+            <button id="break-toggle-btn" 
+               onclick="handleBreakToggle()" 
+               class="w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50" disabled>
+            Initializing...
+            </button>
+         </div>
+         <div class="bg-indigo-700 card rounded-xl p-6 mb-8 text-white no-print">
+            <h2 class="text-xl font-bold mb-2">Unreported Time Summary (Synced)</h2>
+            <p id="report-since" class="text-sm opacity-75 mb-4">Last reported: <span id="last-reported-date" class="font-semibold loading-text loading-shimmer rounded">Loading date...</span></p>
+            <div class="flex flex-col space-y-2 mb-4">
+               <div class="flex justify-between items-center text-lg font-bold">
+                  <span>Work Time:</span>
+                  <span id="total-work-time" class="font-mono text-xl loading-text loading-shimmer rounded">00:00:00</span>
+               </div>
+               <div class="flex justify-between items-center text-sm">
+                  <span>Break Time:</span>
+                  <span id="total-break-time" class="font-mono loading-text loading-shimmer rounded">00:00:00</span>
+               </div>
+            </div>
+            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-indigo-300 hover:bg-indigo-300 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
+            Mark All as Reported
+            </button>
+         </div>
+         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
+            <h2 class="text-xl font-bold mb-4 text-gray-700">Priority Tasks (Synced)</h2>
+            <p class="text-xs text-gray-500 mb-4">This task list is synchronized across all your devices.</p>
+            <div id="unfinished-tasks-list" class="space-y-2 mb-4">
+               <p class="text-center py-6 text-gray-500" id="task-loading">Awaiting database connection...</p>
+            </div>
+            <div class="border-t pt-4 mt-4">
+               <h3 class="text-lg font-semibold text-gray-700 mb-3">Add New Task</h3>
+               <div class="flex space-x-2 mb-2">
+                  <input type="text" id="new-task-text" placeholder="Task Description (e.g., Email Bob)" class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+                  <button id="calendar-toggle-btn" onclick="handleCalendarClick()" class="flex-shrink-0 p-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition duration-150" title="Toggle Due Date">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar">
+                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                        <line x1="16" x2="16" y1="2" y2="6"/>
+                        <line x1="8" x2="8" y1="2" y2="6"/>
+                        <line x1="3" x2="21" y1="10" y2="10"/>
+                     </svg>
+                  </button>
+                  <button id="add-task-btn" onclick="handleAddTask()" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
+                  Add
+                  </button>
+               </div>
+               <div id="due-date-container" class="mt-3 hidden">
+                  <label for="new-due-date" class="text-sm font-medium text-gray-600">Select Due Date (Optional):</label>
+                  <input type="date" id="new-due-date" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+               </div>
+            </div>
+         </div>
 <div id="log-report-container" class="bg-white card rounded-xl p-6 mb-8">
-    
-    <div class="mb-2 no-print"> 
-        <h2 class="text-xl font-bold text-gray-700"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
-    </div>
+    
+    <div class="mb-2 no-print"> 
+        <h2 class="text-xl font-bold text-gray-700"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
+    </div>
 
-    <div class="flex space-x-2 mb-4 no-print">
-        
-        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
-            Manage Log Events
-        </button>
-        
-        <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
-                class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold p-3 rounded-xl transition duration-150" 
-                title="Download Full Log History as CSV" 
-                style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-        </button>
-        
-        <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
-            Print Report
-        </button>
-    </div>
-    
-    <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-        <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
-    </div>
-    <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
+    <div class="flex space-x-2 mb-4 no-print">
+        
+        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
+            Manage Log Events
+        </button>
+        
+        <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
+                class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold p-3 rounded-xl transition duration-150" 
+                title="Download Full Log History as CSV" 
+                style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+        </button>
+        
+        <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
+            Print Report
+        </button>
+    </div>
+    
+    <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+        <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
+    </div>
+    <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
 </div>
-         <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
-               <h3 id="message-title" class="text-xl font-bold mb-3 text-red-600">Alert</h3>
-               <p id="message-content" class="text-gray-700 mb-4"></p>
-               <button onclick="hideMessage()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg">
-               OK
-               </button>
-            </div>
-         </div>
-         <div id="editLogModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-               <h3 class="text-2xl font-bold mb-4 text-gray-800">Edit Log Event</h3>
-               <p class="text-sm text-gray-600 mb-4">Adjust the timestamp for the selected event. This will automatically recalculate all reports.</p>
-               <input type="hidden" id="editingLogId">
-               <p class="font-semibold mb-2">Event Type: <span id="editingLogType" class="text-indigo-600"></span></p>
-               <div class="mb-4">
-                  <label for="editDate" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" id="editDate" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-               </div>
-               <div class="mb-6">
-                  <label for="editTime" class="block text-sm font-medium text-gray-700 mb-1">Time (24-hour format, HH:MM)</label>
-                  <input type="time" id="editTime" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-               </div>
-               <div class="flex justify-end space-x-3">
-                  <button onclick="hideEditModal()" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition duration-150">
-                  Cancel
-                  </button>
-                  <button onclick="handleSaveEdit()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition duration-150">
-                  Save Changes
-                  </button>
-               </div>
-            </div>
-         </div>
-      </div>
-      <script type="module">
-         // --- IMMEDIATE VIEWPORT FIX ---
-         (function() {
-             // 1. Force remove any existing viewport tag
-             const metaTags = document.head.getElementsByTagName('meta');
-             for (let i = metaTags.length - 1; i >= 0; i--) {
-                 if (metaTags[i].name === 'viewport') {
-                     document.head.removeChild(metaTags[i]);
-                 }
-             }
-             
-             // 2. Create the robust viewport tag and inject it
-             const newMeta = document.createElement('meta');
-             newMeta.name = 'viewport';
-             // Explicitly set width to device-width and prevent scaling
-             newMeta.content = 'width=device-width, initial-scale=1.0';
-             document.head.appendChild(newMeta);
-         })(); 
-         // -----------------------------
-         
-         // --- INJECTED FIREBASE CONFIGURATION (Original, Unchanged) ---
-         const __app_id = '1:271808577978:web:c2e0f745681401fe4f1d83';
-         const __firebase_config = '{"apiKey":"AIzaSyAGxZVLaHkowzF5ioMGGS9FnqMh31Zs5ds","authDomain":"timeclockapp-59694.firebaseapp.com","projectId":"timeclockapp-59694","storageBucket":"timeclockapp-59694.appspot.com","messagingSenderId":"271808577978","appId":"1:271808577978:web:c2e0f745681401fe4f1d83","measurementId":"G-6C1MRRFZTB"}';
-         const __initial_auth_token = ""; 
-         
-         // --- Firebase Imports ---
-         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { 
-    getAuth, 
-    GoogleAuthProvider, 
-    signInWithPopup,    
-    onAuthStateChanged, 
-    setPersistence, 
-    browserLocalPersistence 
+         <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+               <h3 id="message-title" class="text-xl font-bold mb-3 text-red-600">Alert</h3>
+               <p id="message-content" class="text-gray-700 mb-4"></p>
+               <button onclick="hideMessage()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg">
+               OK
+               </button>
+            </div>
+         </div>
+         <div id="editLogModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+               <h3 class="text-2xl font-bold mb-4 text-gray-800">Edit Log Event</h3>
+               <p class="text-sm text-gray-600 mb-4">Adjust the timestamp for the selected event. This will automatically recalculate all reports.</p>
+               <input type="hidden" id="editingLogId">
+               <p class="font-semibold mb-2">Event Type: <span id="editingLogType" class="text-indigo-600"></span></p>
+               <div class="mb-4">
+                  <label for="editDate" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input type="date" id="editDate" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+               </div>
+               <div class="mb-6">
+                  <label for="editTime" class="block text-sm font-medium text-gray-700 mb-1">Time (24-hour format, HH:MM)</label>
+                  <input type="time" id="editTime" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+               </div>
+               <div class="flex justify-end space-x-3">
+                  <button onclick="hideEditModal()" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition duration-150">
+                  Cancel
+                  </button>
+                  <button onclick="handleSaveEdit()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition duration-150">
+                  Save Changes
+                  </button>
+               </div>
+            </div>
+         </div>
+      </div>
+      <script type="module">
+         // --- IMMEDIATE VIEWPORT FIX ---
+         (function() {
+             // 1. Force remove any existing viewport tag
+             const metaTags = document.head.getElementsByTagName('meta');
+             for (let i = metaTags.length - 1; i >= 0; i--) {
+                 if (metaTags[i].name === 'viewport') {
+                     document.head.removeChild(metaTags[i]);
+                 }
+             }
+             
+             // 2. Create the robust viewport tag and inject it
+             const newMeta = document.createElement('meta');
+             newMeta.name = 'viewport';
+             // Explicitly set width to device-width and prevent scaling
+             newMeta.content = 'width=device-width, initial-scale=1.0';
+             document.head.appendChild(newMeta);
+         })(); 
+         // -----------------------------
+         
+         // --- INJECTED FIREBASE CONFIGURATION (Original, Unchanged) ---
+         const __app_id = '1:271808577978:web:c2e0f745681401fe4f1d83';
+         const __firebase_config = '{"apiKey":"AIzaSyAGxZVLaHkowzF5ioMGGS9FnqMh31Zs5ds","authDomain":"timeclockapp-59694.firebaseapp.com","projectId":"timeclockapp-59694","storageBucket":"timeclockapp-59694.appspot.com","messagingSenderId":"271808577978","appId":"1:271808577978:web:c2e0f745681401fe4f1d83","measurementId":"G-6C1MRRFZTB"}';
+         const __initial_auth_token = ""; 
+         
+         // --- Firebase Imports ---
+         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { 
+    getAuth, 
+    GoogleAuthProvider, 
+    signInWithPopup,    
+    onAuthStateChanged, 
+    setPersistence, 
+    browserLocalPersistence 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, query, orderBy, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-         // --- State and Constants ---
-         let db;
-         let auth;
-         let userId = null;
-         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-         const firebaseConfig = JSON.parse(__firebase_config);
-         
-         let currentState = {
-             isClockedIn: false,
-             isUserOnBreak: false,
-             tasks: [], 
-             lastReportTimestamp: null 
-         };
-         
-         let currentReportData = { 
-             segments: [], 
-             totalWorkTime: '00:00:00', 
-             totalBreakTime: '00:00:00',
-             reportStartDate: new Date(), 
-             reportEndDate: new Date() 
-         };
-         
-         // NEW STATE: Stores the raw log events (with IDs) and controls the log view
-         let rawLogEvents = [];
-         let isManagingLogs = false; // False = show report segments, True = show raw events
-         
-         let showDatePicker = false;
-         let newDueDate = null; // Stored as YYYY-MM-DD string
-         
-         // --- DOM Elements (Same as before) ---
-         const clockToggleBtn = document.getElementById('clock-toggle-btn');
-         const breakToggleBtn = document.getElementById('break-toggle-btn');
-         const clockStatusPill = document.getElementById('clock-status-pill');
-         const breakStatusPill = document.getElementById('break-status-pill');
-         const tasksListEl = document.getElementById('unfinished-tasks-list');
-         const taskLoadingEl = document.getElementById('task-loading');
-         const userIdDisplayEl = document.getElementById('user-id-display');
-         const logHistoryListEl = document.getElementById('log-history-list'); 
-         const historyLoadingEl = document.getElementById('history-loading'); 
-         const printReportBtn = document.getElementById('print-report-btn');
-         const totalWorkTimeEl = document.getElementById('total-work-time'); 
-         const totalBreakTimeEl = document.getElementById('total-break-time'); 
-         const lastReportedDateEl = document.getElementById('last-reported-date'); 
-         const markReportedBtn = document.getElementById('mark-reported-btn'); 
-         const newTaskTextEl = document.getElementById('new-task-text');
-         const addTaskBtn = document.getElementById('add-task-btn');
-         const dueDateContainerEl = document.getElementById('due-date-container');
-         const newDueDateEl = document.getElementById('new-due-date');
-         const logViewTitleEl = document.getElementById('log-view-title');
-         const logFooterTextEl = document.getElementById('log-footer-text');
-         const manageLogsBtn = document.getElementById('manage-logs-btn');
-         
-         // Edit Modal Elements
-         const editLogModal = document.getElementById('editLogModal');
-         const editingLogIdEl = document.getElementById('editingLogId');
-         const editingLogTypeEl = document.getElementById('editingLogType');
-         const editDateEl = document.getElementById('editDate');
-         const editTimeEl = document.getElementById('editTime');
-         
-         newDueDateEl.addEventListener('change', (e) => {
-             newDueDate = e.target.value;
-         });
-         
-         
-         // --- Utility & UI Functions ---
-         
-         /**
-          * Converts milliseconds to HH:MM:SS format.
-          * IMPORTANT: Ensures the output is always positive.
-          */
-         function msToHours(ms) {
-             // Use absolute value to prevent negative display time in summary
-             const totalMs = Math.abs(ms); 
-             const totalSeconds = Math.floor(totalMs / 1000);
-             const hours = Math.floor(totalSeconds / 3600);
-             const minutes = Math.floor((totalSeconds % 3600) / 60);
-             const seconds = totalSeconds % 60;
-             return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-         }
-         
-         function renderReportSummary(workTime, breakTime) {
-             totalWorkTimeEl.textContent = workTime;
-             totalBreakTimeEl.textContent = breakTime;
-         
-             const ts = currentState.lastReportTimestamp;
-             if (ts) {
-                 const date = new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                 lastReportedDateEl.textContent = date;
-             } else {
-                 lastReportedDateEl.textContent = 'Never (Showing All Time)';
-             }
-             // Remove loading placeholders once data is available
-             totalWorkTimeEl.classList.remove('loading-text', 'loading-shimmer');
-             totalBreakTimeEl.classList.remove('loading-text', 'loading-shimmer');
-             lastReportedDateEl.classList.remove('loading-text', 'loading-shimmer');
-         }
-         
-         function showMessage(title, content, isError = false) {
-             const box = document.getElementById('message-box');
-             const titleEl = document.getElementById('message-title');
-             const contentEl = document.getElementById('message-content');
-             
-             titleEl.textContent = title;
-             contentEl.textContent = content;
-         
-             titleEl.className = `text-xl font-bold mb-3 ${isError ? 'text-red-600' : 'text-green-600'}`;
-         
-             box.classList.remove('hidden');
-             box.classList.add('flex');
-         }
-         
-         window.hideMessage = function() {
-             document.getElementById('message-box').classList.remove('flex');
-             document.getElementById('message-box').classList.add('hidden');
-         }
-         
-         window.hideEditModal = function() {
-             editLogModal.classList.remove('flex');
-             editLogModal.classList.add('hidden');
-         }
-         
-         function renderStatus() {
-             // Update UI based on currentState
-             // Clock Status Pill
-             if (currentState.isClockedIn) {
-                 clockStatusPill.textContent = 'CLOCKED IN';
-                 clockStatusPill.className = 'status-pill bg-green-100 text-green-700';
-                 clockToggleBtn.textContent = 'Clock OUT';
-                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-red-600 hover:bg-red-700';
-             } else {
-                 clockStatusPill.textContent = 'CLOCKED OUT';
-                 clockStatusPill.className = 'status-pill bg-red-100 text-red-700';
-                 clockToggleBtn.textContent = 'Clock IN';
-                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-green-600 hover:bg-green-700';
-             }
-         
-             // Break Status Pill & Button
-             if (currentState.isUserOnBreak) {
-                 breakStatusPill.textContent = 'ON BREAK';
-                 breakStatusPill.className = 'status-pill bg-yellow-100 text-amber-700';
-                 breakToggleBtn.textContent = 'Break END';
-                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
-                 breakToggleBtn.disabled = !currentState.isClockedIn;
-             } else {
-                 breakStatusPill.textContent = 'WORKING';
-                 breakStatusPill.className = 'status-pill bg-indigo-100 text-indigo-700';
-                 breakToggleBtn.textContent = 'Break START';
-                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
-                 breakToggleBtn.disabled = !currentState.isClockedIn;
-             }
-         }
-         
+         // --- State and Constants ---
+         let db;
+         let auth;
+         let userId = null;
+         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+         const firebaseConfig = JSON.parse(__firebase_config);
+         
+         let currentState = {
+             isClockedIn: false,
+             isUserOnBreak: false,
+             tasks: [], 
+             lastReportTimestamp: null 
+         };
+         
+         let currentReportData = { 
+             segments: [], 
+             totalWorkTime: '00:00:00', 
+             totalBreakTime: '00:00:00',
+             reportStartDate: new Date(), 
+             reportEndDate: new Date() 
+         };
+         
+         // NEW STATE: Stores the raw log events (with IDs) and controls the log view
+         let rawLogEvents = [];
+         let isManagingLogs = false; // False = show report segments, True = show raw events
+         
+         let showDatePicker = false;
+         let newDueDate = null; // Stored as YYYY-MM-DD string
+         
+         // --- DOM Elements (Same as before) ---
+         const clockToggleBtn = document.getElementById('clock-toggle-btn');
+         const breakToggleBtn = document.getElementById('break-toggle-btn');
+         const clockStatusPill = document.getElementById('clock-status-pill');
+         const breakStatusPill = document.getElementById('break-status-pill');
+         const tasksListEl = document.getElementById('unfinished-tasks-list');
+         const taskLoadingEl = document.getElementById('task-loading');
+         const userIdDisplayEl = document.getElementById('user-id-display');
+         const logHistoryListEl = document.getElementById('log-history-list'); 
+         const historyLoadingEl = document.getElementById('history-loading'); 
+         const printReportBtn = document.getElementById('print-report-btn');
+         const totalWorkTimeEl = document.getElementById('total-work-time'); 
+         const totalBreakTimeEl = document.getElementById('total-break-time'); 
+         const lastReportedDateEl = document.getElementById('last-reported-date'); 
+         const markReportedBtn = document.getElementById('mark-reported-btn'); 
+         const newTaskTextEl = document.getElementById('new-task-text');
+         const addTaskBtn = document.getElementById('add-task-btn');
+         const dueDateContainerEl = document.getElementById('due-date-container');
+         const newDueDateEl = document.getElementById('new-due-date');
+         const logViewTitleEl = document.getElementById('log-view-title');
+         const logFooterTextEl = document.getElementById('log-footer-text');
+         const manageLogsBtn = document.getElementById('manage-logs-btn');
+         
+         // Edit Modal Elements
+         const editLogModal = document.getElementById('editLogModal');
+         const editingLogIdEl = document.getElementById('editingLogId');
+         const editingLogTypeEl = document.getElementById('editingLogType');
+         const editDateEl = document.getElementById('editDate');
+         const editTimeEl = document.getElementById('editTime');
+         
+         newDueDateEl.addEventListener('change', (e) => {
+             newDueDate = e.target.value;
+         });
+         
+         
+         // --- Utility & UI Functions ---
+         
+         /**
+          * Converts milliseconds to HH:MM:SS format.
+          * IMPORTANT: Ensures the output is always positive.
+          */
+         function msToHours(ms) {
+             // Use absolute value to prevent negative display time in summary
+             const totalMs = Math.abs(ms); 
+             const totalSeconds = Math.floor(totalMs / 1000);
+             const hours = Math.floor(totalSeconds / 3600);
+             const minutes = Math.floor((totalSeconds % 3600) / 60);
+             const seconds = totalSeconds % 60;
+             return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+         }
+         
+         function renderReportSummary(workTime, breakTime) {
+             totalWorkTimeEl.textContent = workTime;
+             totalBreakTimeEl.textContent = breakTime;
+         
+             const ts = currentState.lastReportTimestamp;
+             if (ts) {
+                 const date = new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                 lastReportedDateEl.textContent = date;
+             } else {
+                 lastReportedDateEl.textContent = 'Never (Showing All Time)';
+             }
+             // Remove loading placeholders once data is available
+             totalWorkTimeEl.classList.remove('loading-text', 'loading-shimmer');
+             totalBreakTimeEl.classList.remove('loading-text', 'loading-shimmer');
+             lastReportedDateEl.classList.remove('loading-text', 'loading-shimmer');
+         }
+         
+         function showMessage(title, content, isError = false) {
+             const box = document.getElementById('message-box');
+             const titleEl = document.getElementById('message-title');
+             const contentEl = document.getElementById('message-content');
+             
+             titleEl.textContent = title;
+             contentEl.textContent = content;
+         
+             titleEl.className = `text-xl font-bold mb-3 ${isError ? 'text-red-600' : 'text-green-600'}`;
+         
+             box.classList.remove('hidden');
+             box.classList.add('flex');
+         }
+         
+         window.hideMessage = function() {
+             document.getElementById('message-box').classList.remove('flex');
+             document.getElementById('message-box').classList.add('hidden');
+         }
+         
+         window.hideEditModal = function() {
+             editLogModal.classList.remove('flex');
+             editLogModal.classList.add('hidden');
+         }
+         
+         function renderStatus() {
+             // Update UI based on currentState
+             // Clock Status Pill
+             if (currentState.isClockedIn) {
+                 clockStatusPill.textContent = 'CLOCKED IN';
+                 clockStatusPill.className = 'status-pill bg-green-100 text-green-700';
+                 clockToggleBtn.textContent = 'Clock OUT';
+                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-red-600 hover:bg-red-700';
+             } else {
+                 clockStatusPill.textContent = 'CLOCKED OUT';
+                 clockStatusPill.className = 'status-pill bg-red-100 text-red-700';
+                 clockToggleBtn.textContent = 'Clock IN';
+                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-green-600 hover:bg-green-700';
+             }
+         
+             // Break Status Pill & Button
+             if (currentState.isUserOnBreak) {
+                 breakStatusPill.textContent = 'ON BREAK';
+                 breakStatusPill.className = 'status-pill bg-yellow-100 text-amber-700';
+                 breakToggleBtn.textContent = 'Break END';
+                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
+                 breakToggleBtn.disabled = !currentState.isClockedIn;
+             } else {
+                 breakStatusPill.textContent = 'WORKING';
+                 breakStatusPill.className = 'status-pill bg-indigo-100 text-indigo-700';
+                 breakToggleBtn.textContent = 'Break START';
+                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
+                 breakToggleBtn.disabled = !currentState.isClockedIn;
+             }
+         }
+         
 // ========================================
 // NEW VERSION (Mobile & Desktop Optimized)
 // ========================================
 function renderTasks() {
-    tasksListEl.innerHTML = '';
+    tasksListEl.innerHTML = '';
 
-    // --- 1. Date Filtering Logic ---
-    const now = new Date();
-    now.setHours(0, 0, 0, 0); // Set to start of today
-    const twoWeeksFromNow = new Date(now);
-    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+    // --- 1. Date Filtering Logic ---
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Set to start of today
+    const twoWeeksFromNow = new Date(now);
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
 
-    console.log('Today:', now);
-    console.log('Two weeks from now:', twoWeeksFromNow);
+    console.log('Today:', now);
+    console.log('Two weeks from now:', twoWeeksFromNow);
 
-    const filteredTasks = currentState.tasks.filter(task => {
-        if (!task.dueDate) return true; // Show tasks with no due date
-        
-        // Ensure due date is compared at the start of the day
-        const dueDate = new Date(task.dueDate + 'T00:00:00');
-        dueDate.setHours(0, 0, 0, 0); // Normalize to start of day
+    const filteredTasks = currentState.tasks.filter(task => {
+        if (!task.dueDate) return true; // Show tasks with no due date
+        
+        // Ensure due date is compared at the start of the day
+        const dueDate = new Date(task.dueDate + 'T00:00:00');
+        dueDate.setHours(0, 0, 0, 0); // Normalize to start of day
 
-        console.log('Task:', task.text, 'Due:', dueDate, 'In range?', (dueDate >= now && dueDate <= twoWeeksFromNow));
+        console.log('Task:', task.text, 'Due:', dueDate, 'In range?', (dueDate >= now && dueDate <= twoWeeksFromNow));
 
-        // Show only if due between today (inclusive) and 2 weeks from now (inclusive)
-        return dueDate >= now && dueDate <= twoWeeksFromNow; 
-    });
+        // Show only if due between today (inclusive) and 2 weeks from now (inclusive)
+        return dueDate >= now && dueDate <= twoWeeksFromNow; 
+    });
 
-    // --- 2. Sorting Logic ---
-    filteredTasks.sort((a, b) => {
-        // Completed tasks go to the bottom
-        if (a.isCompleted !== b.isCompleted) {
-            return a.isCompleted ? 1 : -1;
-        }
-        // Otherwise, sort by creation time (newest first)
-        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date().getTime();
-        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date().getTime();
-        return timeB - timeA;
-    });
+    // --- 2. Sorting Logic ---
+    filteredTasks.sort((a, b) => {
+        // Completed tasks go to the bottom
+        if (a.isCompleted !== b.isCompleted) {
+            return a.isCompleted ? 1 : -1;
+        }
+        // Otherwise, sort by creation time (newest first)
+        const timeA = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : new Date().getTime();
+        const timeB = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : new Date().getTime();
+        return timeB - timeA;
+    });
 
-    // --- 3. Empty State Check ---
-    if (filteredTasks.length === 0) {
-        // ✅ Responsive text size (text-sm)
-        tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
-        return;
-    }
+    // --- 3. Empty State Check ---
+    if (filteredTasks.length === 0) {
+        // ✅ Responsive text size (text-sm)
+        tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
+        return;
+    }
 
-    // --- 4. Rendering the Filtered Tasks ---
-    // 👇 CRUCIAL FIX: Loop over the filteredTasks array
-    filteredTasks.forEach((task) => { 
-        const item = document.createElement('div');
-        const completed = task.isCompleted;
+    // --- 4. Rendering the Filtered Tasks ---
+    // 👇 CRUCIAL FIX: Loop over the filteredTasks array
+    filteredTasks.forEach((task) => { 
+        const item = document.createElement('div');
+        const completed = task.isCompleted;
 
-        // --- Item Styling ---
-        const itemClasses = completed
-            // ✅ items-start: aligns items at top, works better when buttons stack
-            ? 'task-item bg-gray-200 rounded-lg flex items-start border-green-500 p-4 mb-3 shadow-sm'
-            : 'task-item bg-white hover:bg-indigo-50 rounded-lg flex items-start border-indigo-500 p-4 mb-3 shadow-md';
+        // --- Item Styling ---
+        const itemClasses = completed
+            // ✅ items-start: aligns items at top, works better when buttons stack
+            ? 'task-item bg-gray-200 rounded-lg flex items-start border-green-500 p-4 mb-3 shadow-sm'
+            : 'task-item bg-white hover:bg-indigo-50 rounded-lg flex items-start border-indigo-500 p-4 mb-3 shadow-md';
 
-        item.className = itemClasses;
+        item.className = itemClasses;
 
-        // --- Text Container (Task Text, Due Date, Creator) ---
-        const textContainer = document.createElement('div');
-        textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
+        // --- Text Container (Task Text, Due Date, Creator) ---
+        const textContainer = document.createElement('div');
+        textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
 
-        const textSpan = document.createElement('span');
-        // 👇 MAIN TASK TEXT: text-lg on mobile, text-lg on screens >= sm
-        textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
-        textSpan.textContent = task.text;
-        textContainer.appendChild(textSpan);
+        const textSpan = document.createElement('span');
+        // 👇 MAIN TASK TEXT: text-lg on mobile, text-lg on screens >= sm
+        textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
+        textSpan.textContent = task.text;
+        textContainer.appendChild(textSpan);
 
-        if (task.dueDate) {
-            const dueDateSpan = document.createElement('span');
-            const dateObj = new Date(task.dueDate + 'T00:00:00');
-            // 👇 DUE DATE: text-base on mobile
-            dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
-            dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
-            textContainer.appendChild(dueDateSpan);
-        }
+        if (task.dueDate) {
+            const dueDateSpan = document.createElement('span');
+            const dateObj = new Date(task.dueDate + 'T00:00:00');
+            // 👇 DUE DATE: text-base on mobile
+            dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+            dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
+            textContainer.appendChild(dueDateSpan);
+        }
 
-        const creatorInfo = document.createElement('div');
-        // 👇 CREATOR INFO: Explicitly set to the smallest size (text-xs)
-        creatorInfo.className = 'text-xs mt-0.5 text-gray-500';
-        creatorInfo.textContent = `By: ${task.ownerId ? task.ownerId.substring(0, 8) + '...' : 'Unknown'}`;
-        textContainer.appendChild(creatorInfo);
+        const creatorInfo = document.createElement('div');
+        // 👇 CREATOR INFO: Explicitly set to the smallest size (text-xs)
+        creatorInfo.className = 'text-xs mt-0.5 text-gray-500';
+        creatorInfo.textContent = `By: ${task.ownerId ? task.ownerId.substring(0, 8) + '...' : 'Unknown'}`;
+        textContainer.appendChild(creatorInfo);
 
-        // --- Button Container ---
-        const buttonContainer = document.createElement('div');
-        // ✅ Buttons side-by-side on all screens. Removed flex-col/flex-row toggle for simplicity/modern UI.
-        buttonContainer.className = 'flex-shrink-0 flex flex-row space-x-2 w-full sm:w-auto justify-end mt-2 sm:mt-0';
+        // --- Button Container ---
+        const buttonContainer = document.createElement('div');
+        // ✅ Buttons side-by-side on all screens. Removed flex-col/flex-row toggle for simplicity/modern UI.
+        buttonContainer.className = 'flex-shrink-0 flex flex-row space-x-2 w-full sm:w-auto justify-end mt-2 sm:mt-0';
 
-        // --- Complete Button ---
-        const completeBtn = document.createElement('button');
-        // ✅ active:scale-95 for touch feedback
-        completeBtn.className = `w-3/5 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
-        completeBtn.textContent = completed ? 'Undo' : ' ✔️ Done ';
-        // Retain functionality
-        completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
+        // --- Complete Button ---
+        const completeBtn = document.createElement('button');
+        // ✅ active:scale-95 for touch feedback
+        completeBtn.className = `w-3/5 text-white text-base font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full transition duration-150 shadow-md active:scale-95 ${completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-green-500 hover:bg-green-600'}`;
+        completeBtn.textContent = completed ? 'Undo' : ' ✔️ Done ';
+        // Retain functionality
+        completeBtn.onclick = () => toggleTaskCompletion(task.id, task.isCompleted);
 
-        // --- Delete Button ---
-        const deleteBtn = document.createElement('button');
-        // ✅ active:scale-95 for touch feedback
-        deleteBtn.className = 'w-2/5 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
-        deleteBtn.textContent = ' 𝘟 ';
-        // Retain functionality
-        deleteBtn.onclick = () => deleteTask(task.id);
+        // --- Delete Button ---
+        const deleteBtn = document.createElement('button');
+        // ✅ active:scale-95 for touch feedback
+        deleteBtn.className = 'w-2/5 text-white text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-1 rounded-full bg-red-500 hover:bg-red-600 transition duration-150 shadow-md active:scale-95';
+        deleteBtn.textContent = ' 𝘟 ';
+        // Retain functionality
+        deleteBtn.onclick = () => deleteTask(task.id);
 
-        buttonContainer.appendChild(completeBtn);
-        buttonContainer.appendChild(deleteBtn);
+        buttonContainer.appendChild(completeBtn);
+        buttonContainer.appendChild(deleteBtn);
 
-        // --- Final Assembly ---
-        item.appendChild(textContainer);
-        item.appendChild(buttonContainer);
-        tasksListEl.appendChild(item);
-    });
-}         
-         
-         /**
-          * Calculates total time and generates segments (spans) of work/break.
-          */
-         function calculateReportData(logs, sinceTimestamp) {
-             let totalWorkMs = 0;
-             let totalBreakMs = 0;
-             let workStart = null;
-             let breakStart = null;
-             const segments = [];
-         
-             const filterCutoffMs = sinceTimestamp ? new Date(sinceTimestamp).getTime() : 0;
-             // Filter logs to only include those that occurred *after* the last report timestamp
-             const filteredLogs = logs.filter(log => new Date(log.timestamp).getTime() > filterCutoffMs);
-         
-             // Sort ascending by timestamp to process events chronologically
-             filteredLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-         
-             // 1. Process historical logs and generate segments
-             filteredLogs.forEach(log => {
-                 const timestamp = new Date(log.timestamp).getTime();
-         
-                 switch (log.type) {
-                     case 'CLOCK_IN':
-                         if (breakStart !== null) {
-                             const duration = timestamp - breakStart;
-                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
-                             totalBreakMs += duration;
-                             breakStart = null;
-                         }
-                         if (workStart === null) {
-                             workStart = timestamp;
-                         }
-                         break;
-         
-                     case 'BREAK_START':
-                         if (workStart !== null) {
-                             const duration = timestamp - workStart;
-                             segments.push({ type: 'WORK', start: new Date(workStart), end: new Date(timestamp), durationMs: duration });
-                             totalWorkMs += duration;
-                             workStart = null; 
-                         }
-                         if (breakStart === null) {
-                             breakStart = timestamp;
-                         }
-                         break;
-         
-                     case 'BREAK_END':
-                         if (breakStart !== null) {
-                             const duration = timestamp - breakStart;
-                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
-                             totalBreakMs += duration;
-                             breakStart = null;
-                         }
-                         if (workStart === null) {
-                             workStart = timestamp;
-                         }
-                         break;
-         
-                     case 'CLOCK_OUT':
-                         if (workStart !== null) {
-                             const duration = timestamp - workStart;
-                             segments.push({ type: 'WORK', start: new Date(workStart), end: new Date(timestamp), durationMs: duration });
-                             totalWorkMs += duration;
-                             workStart = null;
-                         }
-                         if (breakStart !== null) {
-                             const duration = timestamp - breakStart;
-                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
-                             totalBreakMs += duration;
-                             breakStart = null;
-                         }
-                         break;
-                 }
-             });
-             
-             // 2. Add current active segment (if clocked in)
-             if (currentState.isClockedIn) {
-                 const now = new Date();
-                 const nowMs = now.getTime();
-                 
-                 // Only consider segments that started *after* the report cutoff
-                 if (currentState.isUserOnBreak && breakStart !== null && breakStart > filterCutoffMs) {
-                     const durationMs = nowMs - breakStart;
-                     segments.push({ type: 'BREAK', start: new Date(breakStart), end: now, durationMs: durationMs, isLive: true });
-                     totalBreakMs += durationMs;
-                 } else if (workStart !== null && workStart > filterCutoffMs) {
-                     const durationMs = nowMs - workStart;
-                     segments.push({ type: 'WORK', start: new Date(workStart), end: now, durationMs: durationMs, isLive: true });
-                     totalWorkMs += durationMs;
-                 }
-             }
-             
-             // Determine report dates for the title
-             const startDate = filteredLogs.length > 0 ? new Date(filteredLogs[0].timestamp) : new Date();
-             const endDate = new Date(); // Always current date
-         
-             // Sort segments by start time for the report view
-             segments.sort((a, b) => a.start.getTime() - b.start.getTime());
-         
-             return {
-                 totalWorkTimeMs: totalWorkMs,
-                 totalBreakTimeMs: totalBreakMs,
-                 segments: segments,
-                 reportStartDate: startDate,
-                 reportEndDate: endDate
-             };
-         }
-         
-         /**
-          * Renders the raw log events for editing/deletion.
-          */
-         function renderRawLogEvents() {
-             logHistoryListEl.innerHTML = '';
-             
-             if (rawLogEvents.length === 0) {
-                 logHistoryListEl.innerHTML = '<p class="text-center py-4 text-gray-500">No time log events found.</p>';
-                 return;
-             }
-         
-             // Sort descending by timestamp (most recent first)
-             const sortedLogs = [...rawLogEvents].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-         
-             const table = document.createElement('table');
-             table.className = 'print-table text-left w-full text-sm';
-             
-             table.innerHTML = `
-                 <thead class="bg-red-100">
-                     <tr>
-                         <th class="p-2">Event Type</th>
-                         <th class="p-2">Timestamp</th>
-                         <th class="p-2 text-right">Actions</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                 </tbody>
-             `;
-             const tbody = table.querySelector('tbody');
-         
-             sortedLogs.forEach(log => {
-                 const row = tbody.insertRow();
-                 
-                 const logTime = new Date(log.timestamp);
-                 const dateText = logTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                 const timeText = logTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-         
-                 row.innerHTML = `
-                     <td class="p-2 font-semibold">${log.type}</td>
-                     <td class="p-2 text-gray-600">${dateText} at ${timeText}</td>
-                     <td class="p-2 text-right space-x-2">
-                         <button onclick="handleEditEvent('${log.id}', '${log.type}', '${log.timestamp}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-1 rounded">Edit</button>
-                         <button onclick="handleDeleteEvent('${log.id}', '${log.type}')" class="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded">Delete</button>
-                     </td>
-                 `;
-             });
-             
-             logHistoryListEl.appendChild(table);
-         }
-         
-         /**
-          * Renders the calculated time log segments (the report view).
-          */
-         function renderTimeLogSegments(segments, totalWorkTimeMs, totalBreakTimeMs) {
-             logHistoryListEl.innerHTML = '';
-             
-             // Format dates for the title (e.g., Nov 26, 26)
-             const dateOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-             const startDateFormatted = currentReportData.reportStartDate.toLocaleDateString('en-US', dateOptions);
-             const endDateFormatted = currentReportData.reportEndDate.toLocaleDateString('en-US', dateOptions);
-             
-             // CALCULATE THE FINAL DISPLAY TOTAL by subtracting break time from work time
-             const netWorkMs = totalWorkTimeMs - totalBreakTimeMs;
-             const netWorkTimeFormatted = msToHours(netWorkMs); // Format the final value
-         
-             // --- 1. Print Header (CORRECTED STRUCTURE) ---
-             const printHeaderContainer = document.createElement('div');
-             // This class is targeted by the @media print CSS to be DISPLAYED.
-             printHeaderContainer.className = 'print-header hidden'; 
-             
-             printHeaderContainer.innerHTML = `
-                 <h1 class="text-xl font-bold mb-1">Time Log Report (${startDateFormatted} - ${endDateFormatted})</h1>
-                 <p class="text-sm">Rosemary E. Pyles</p>
-                 <p class="text-sm font-bold mt-2">TOTAL WORKED: ${netWorkTimeFormatted}</p>
-                 <p class="text-xs">Reported Since: ${lastReportedDateEl.textContent}</p>
-             `;
-             // Insert the header at the top of the report list container
-             logHistoryListEl.prepend(printHeaderContainer); 
-         
-             // --- 2. Segment Table ---
-             if (segments.length === 0) {
-                 const p = document.createElement('p');
-                 p.className = 'text-center py-4 text-gray-500';
-                 p.textContent = 'No new time segments found since the last report.';
-                 logHistoryListEl.appendChild(p);
-                 // Also update the UI summary to 00:00:00 if no data
-                 renderReportSummary('00:00:00', '00:00:00'); 
-                 return;
-             }
-         
-             const table = document.createElement('table');
-             table.className = 'print-table text-left w-full text-sm';
-             
-             // 🛑 FIX: Removed 'Activity' header column
-             table.innerHTML = `
+        // --- Final Assembly ---
+        item.appendChild(textContainer);
+        item.appendChild(buttonContainer);
+        tasksListEl.appendChild(item);
+    });
+}         
+         
+         /**
+          * Calculates total time and generates segments (spans) of work/break.
+          */
+         function calculateReportData(logs, sinceTimestamp) {
+             let totalWorkMs = 0;
+             let totalBreakMs = 0;
+             let workStart = null;
+             let breakStart = null;
+             const segments = [];
+         
+             const filterCutoffMs = sinceTimestamp ? new Date(sinceTimestamp).getTime() : 0;
+             // Filter logs to only include those that occurred *after* the last report timestamp
+             const filteredLogs = logs.filter(log => new Date(log.timestamp).getTime() > filterCutoffMs);
+         
+             // Sort ascending by timestamp to process events chronologically
+             filteredLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+         
+             // 1. Process historical logs and generate segments
+             filteredLogs.forEach(log => {
+                 const timestamp = new Date(log.timestamp).getTime();
+         
+                 switch (log.type) {
+                     case 'CLOCK_IN':
+                         if (breakStart !== null) {
+                             const duration = timestamp - breakStart;
+                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
+                             totalBreakMs += duration;
+                             breakStart = null;
+                         }
+                         if (workStart === null) {
+                             workStart = timestamp;
+                         }
+                         break;
+         
+                     case 'BREAK_START':
+                         if (workStart !== null) {
+                             const duration = timestamp - workStart;
+                             segments.push({ type: 'WORK', start: new Date(workStart), end: new Date(timestamp), durationMs: duration });
+                             totalWorkMs += duration;
+                             workStart = null; 
+                         }
+                         if (breakStart === null) {
+                             breakStart = timestamp;
+                         }
+                         break;
+         
+                     case 'BREAK_END':
+                         if (breakStart !== null) {
+                             const duration = timestamp - breakStart;
+                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
+                             totalBreakMs += duration;
+                             breakStart = null;
+                         }
+                         if (workStart === null) {
+                             workStart = timestamp;
+                         }
+                         break;
+         
+                     case 'CLOCK_OUT':
+                         if (workStart !== null) {
+                             const duration = timestamp - workStart;
+                             segments.push({ type: 'WORK', start: new Date(workStart), end: new Date(timestamp), durationMs: duration });
+                             totalWorkMs += duration;
+                             workStart = null;
+                         }
+                         if (breakStart !== null) {
+                             const duration = timestamp - breakStart;
+                             segments.push({ type: 'BREAK', start: new Date(breakStart), end: new Date(timestamp), durationMs: duration });
+                             totalBreakMs += duration;
+                             breakStart = null;
+                         }
+                         break;
+                 }
+             });
+             
+             // 2. Add current active segment (if clocked in)
+             if (currentState.isClockedIn) {
+                 const now = new Date();
+                 const nowMs = now.getTime();
+                 
+                 // Only consider segments that started *after* the report cutoff
+                 if (currentState.isUserOnBreak && breakStart !== null && breakStart > filterCutoffMs) {
+                     const durationMs = nowMs - breakStart;
+                     segments.push({ type: 'BREAK', start: new Date(breakStart), end: now, durationMs: durationMs, isLive: true });
+                     totalBreakMs += durationMs;
+                 } else if (workStart !== null && workStart > filterCutoffMs) {
+                     const durationMs = nowMs - workStart;
+                     segments.push({ type: 'WORK', start: new Date(workStart), end: now, durationMs: durationMs, isLive: true });
+                     totalWorkMs += durationMs;
+                 }
+             }
+             
+             // Determine report dates for the title
+             const startDate = filteredLogs.length > 0 ? new Date(filteredLogs[0].timestamp) : new Date();
+             const endDate = new Date(); // Always current date
+         
+             // Sort segments by start time for the report view
+             segments.sort((a, b) => a.start.getTime() - b.start.getTime());
+         
+             return {
+                 totalWorkTimeMs: totalWorkMs,
+                 totalBreakTimeMs: totalBreakMs,
+                 segments: segments,
+                 reportStartDate: startDate,
+                 reportEndDate: endDate
+             };
+         }
+         
+         /**
+          * Renders the raw log events for editing/deletion.
+          */
+         function renderRawLogEvents() {
+             logHistoryListEl.innerHTML = '';
+             
+             if (rawLogEvents.length === 0) {
+                 logHistoryListEl.innerHTML = '<p class="text-center py-4 text-gray-500">No time log events found.</p>';
+                 return;
+             }
+         
+             // Sort descending by timestamp (most recent first)
+             const sortedLogs = [...rawLogEvents].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+         
+             const table = document.createElement('table');
+             table.className = 'print-table text-left w-full text-sm';
+             
+             table.innerHTML = `
+                 <thead class="bg-red-100">
+                     <tr>
+                         <th class="p-2">Event Type</th>
+                         <th class="p-2">Timestamp</th>
+                         <th class="p-2 text-right">Actions</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                 </tbody>
+             `;
+             const tbody = table.querySelector('tbody');
+         
+             sortedLogs.forEach(log => {
+                 const row = tbody.insertRow();
+                 
+                 const logTime = new Date(log.timestamp);
+                 const dateText = logTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                 const timeText = logTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+         
+                 row.innerHTML = `
+                     <td class="p-2 font-semibold">${log.type}</td>
+                     <td class="p-2 text-gray-600">${dateText} at ${timeText}</td>
+                     <td class="p-2 text-right space-x-2">
+                         <button onclick="handleEditEvent('${log.id}', '${log.type}', '${log.timestamp}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-1 rounded">Edit</button>
+                         <button onclick="handleDeleteEvent('${log.id}', '${log.type}')" class="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded">Delete</button>
+                     </td>
+                 `;
+             });
+             
+             logHistoryListEl.appendChild(table);
+         }
+         
+         /**
+          * Renders the calculated time log segments (the report view).
+          */
+         function renderTimeLogSegments(segments, totalWorkTimeMs, totalBreakTimeMs) {
+             logHistoryListEl.innerHTML = '';
+             
+             // Format dates for the title (e.g., Nov 26, 26)
+             const dateOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+             const startDateFormatted = currentReportData.reportStartDate.toLocaleDateString('en-US', dateOptions);
+             const endDateFormatted = currentReportData.reportEndDate.toLocaleDateString('en-US', dateOptions);
+             
+             // CALCULATE THE FINAL DISPLAY TOTAL by subtracting break time from work time
+             const netWorkMs = totalWorkTimeMs - totalBreakTimeMs;
+             const netWorkTimeFormatted = msToHours(netWorkMs); // Format the final value
+         
+             // --- 1. Print Header (CORRECTED STRUCTURE) ---
+             const printHeaderContainer = document.createElement('div');
+             // This class is targeted by the @media print CSS to be DISPLAYED.
+             printHeaderContainer.className = 'print-header hidden'; 
+             
+             printHeaderContainer.innerHTML = `
+                 <h1 class="text-xl font-bold mb-1">Time Log Report (${startDateFormatted} - ${endDateFormatted})</h1>
+                 <p class="text-sm">Rosemary E. Pyles</p>
+                 <p class="text-sm font-bold mt-2">TOTAL WORKED: ${netWorkTimeFormatted}</p>
+                 <p class="text-xs">Reported Since: ${lastReportedDateEl.textContent}</p>
+             `;
+             // Insert the header at the top of the report list container
+             logHistoryListEl.prepend(printHeaderContainer); 
+         
+             // --- 2. Segment Table ---
+             if (segments.length === 0) {
+                 const p = document.createElement('p');
+                 p.className = 'text-center py-4 text-gray-500';
+                 p.textContent = 'No new time segments found since the last report.';
+                 logHistoryListEl.appendChild(p);
+                 // Also update the UI summary to 00:00:00 if no data
+                 renderReportSummary('00:00:00', '00:00:00'); 
+                 return;
+             }
+         
+             const table = document.createElement('table');
+             table.className = 'print-table text-left w-full text-sm';
+             
+             table.innerHTML = `
                  <thead class="bg-gray-200">
                      <tr>
                          <th class="p-2">Date</th>
+                         <th class="p-2">Activity</th> 
                          <th class="p-2">Start Time</th>
                          <th class="p-2">End Time</th>
                          <th class="p-2 text-right">Duration</th>
@@ -791,670 +791,670 @@ function renderTasks() {
                  <tbody>
                  </tbody>
              `;
-             const tbody = table.querySelector('tbody');
-         
-             segments.forEach(segment => {
-                 const row = tbody.insertRow();
-                 const date = segment.start.toLocaleDateString('en-US', dateOptions);
-                 const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
-                 const startTime = segment.start.toLocaleTimeString('en-US', timeOptions);
-                 
-                 // Use 'LIVE' or formatted time for end time
-                 const endTime = segment.isLive 
-                     ? '<span class="text-indigo-500 font-semibold">LIVE</span>' 
-                     : segment.end.toLocaleTimeString('en-US', timeOptions);
-                 
-                 const durationText = msToHours(segment.durationMs);
-                 
-                 let activityText; // Still calculated, but not displayed in print/report view
-                 let colorClass;
-                 let durationDisplay;
-         
-                 if (segment.type === 'WORK') {
-                     activityText = 'Work';
-                     colorClass = 'text-green-600';
-                     durationDisplay = `<span class="font-bold">${durationText}</span>`;
-                 } else { // BREAK
-                     activityText = 'Break';
-                     colorClass = 'text-red-600';
-                     // Display break time in parentheses
-                     durationDisplay = `<span class="font-bold text-red-600">(${durationText})</span>`; 
-                 }
-                 
-                 // Check for negative duration (which can happen with inconsistent logs)
-                 if (segment.durationMs < 0) {
-                      durationDisplay = `<span class="font-bold text-red-700">TIME CONFLICT!</span>`; 
-                      row.classList.add('bg-red-100'); // Highlight the error row
-                 }
-         
-                 // 🛑 FIX: Removed 'Activity' data cell. Now only 4 columns.
-                 row.innerHTML = `
-                     <td class="p-2 text-gray-700">${date}</td>
-                     <td class="p-2 text-gray-600">${startTime}</td>
-                     <td class="p-2 text-gray-600">${endTime}</td>
-                     <td class="p-2 text-right">${durationDisplay}</td>
-                 `;
-             });
-             
-             logHistoryListEl.appendChild(table);
-             
-             // 3. Update the UI summary totals using the calculated raw milliseconds
-             renderReportSummary(netWorkTimeFormatted, msToHours(totalWorkTimeMs));
-         }
-         
-         // --- Render Main Log View based on isManagingLogs state ---
-         function renderMainLogView() {
-             if (isManagingLogs) {
-                 logViewTitleEl.textContent = 'Raw Log Events (Edit/Delete)';
-                 logFooterTextEl.textContent = 'Correcting these timestamps will automatically update the report.';
-                 manageLogsBtn.textContent = 'View Report Segments';
-                 renderRawLogEvents();
-             } else {
-                 logViewTitleEl.textContent = 'Time Log Segments (For Reporting)';
-                 logFooterTextEl.textContent = 'Calculated time spans since the last report cutoff.';
-                 manageLogsBtn.textContent = 'Manage Log Events';
-                 renderTimeLogSegments(currentReportData.segments, currentReportData.totalWorkTimeMs, currentReportData.totalBreakTimeMs);
-             }
-         }
-         
-         // --- Log Management Handlers ---
-         
-         window.handleLogViewToggle = function() {
-             isManagingLogs = !isManagingLogs;
-             renderMainLogView();
-         }
-         
-         window.handleEditEvent = function(logId, logType, logTimestamp) {
-             const date = new Date(logTimestamp);
-             
-             // Format date to YYYY-MM-DD
-             const year = date.getFullYear();
-             const month = String(date.getMonth() + 1).padStart(2, '0');
-             const day = String(date.getDate()).padStart(2, '0');
-             const dateValue = `${year}-${month}-${day}`;
-         
-             // Format time to HH:MM (24-hour)
-             const hours = String(date.getHours()).padStart(2, '0');
-             const minutes = String(date.getMinutes()).padStart(2, '0');
-             const timeValue = `${hours}:${minutes}`;
-         
-             // Populate the modal
-             editingLogIdEl.value = logId;
-             editingLogTypeEl.textContent = logType;
-             editDateEl.value = dateValue;
-             editTimeEl.value = timeValue;
-         
-             // Show the modal
-             editLogModal.classList.remove('hidden');
-             editLogModal.classList.add('flex');
-         }
-         
-         window.handleSaveEdit = async function() {
-             const logId = editingLogIdEl.value;
-             const newDateStr = editDateEl.value;
-             const newTimeStr = editTimeEl.value;
-             
-             if (!logId || !newDateStr || !newTimeStr) {
-                 showMessage("Input Error", "Please select both a valid date and time.", true);
-                 return;
-             }
-         
-             // Combine date and time to create a new timestamp
-             const newTimestampISO = new Date(`${newDateStr}T${newTimeStr}:00`).toISOString();
-         
-             hideEditModal();
-         
-             try {
-                 const logRef = doc(db, getTimeLogCollectionRef().path, logId);
-                 await updateDoc(logRef, {
-                     timestamp: newTimestampISO
-                 });
-                 showMessage("Log Updated", `Successfully updated log event ID: ${logId.substring(0, 8)}...`, false);
-             } catch (e) {
-                 console.error("Error updating log event:", e);
-                 showMessage("Update Failed", `Failed to update log event. Error: ${e.message}`, true);
-             }
-         }
-         
+             const tbody = table.querySelector('tbody');
+         
+             segments.forEach(segment => {
+                 const row = tbody.insertRow();
+                 const date = segment.start.toLocaleDateString('en-US', dateOptions);
+                 const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                 const startTime = segment.start.toLocaleTimeString('en-US', timeOptions);
+                 
+                 // Use 'LIVE' or formatted time for end time
+                 const endTime = segment.isLive 
+                     ? '<span class="text-indigo-500 font-semibold">LIVE</span>' 
+                     : segment.end.toLocaleTimeString('en-US', timeOptions);
+                 
+                 const durationText = msToHours(segment.durationMs);
+                 
+                 let activityText;
+                 let colorClass;
+                 let durationDisplay;
+         
+                 if (segment.type === 'WORK') {
+                     activityText = 'Work';
+                     colorClass = 'text-green-600';
+                     durationDisplay = `<span class="font-bold">${durationText}</span>`;
+                 } else { // BREAK
+                     activityText = 'Break';
+                     colorClass = 'text-red-600';
+                     // Display break time in parentheses
+                     durationDisplay = `<span class="font-bold text-red-600">(${durationText})</span>`; 
+                 }
+                 
+                 // Check for negative duration (which can happen with inconsistent logs)
+                 if (segment.durationMs < 0) {
+                      durationDisplay = `<span class="font-bold text-red-700">TIME CONFLICT!</span>`; 
+                      row.classList.add('bg-red-100'); // Highlight the error row
+                 }
+         
+                 row.innerHTML = `
+                     <td class="p-2 text-gray-700">${date}</td>
+                     <td class="p-2 font-semibold ${colorClass}">${activityText}</td>
+                     <td class="p-2 text-gray-600">${startTime}</td>
+                     <td class="p-2 text-gray-600">${endTime}</td>
+                     <td class="p-2 text-right">${durationDisplay}</td>
+                 `;
+             });
+             
+             logHistoryListEl.appendChild(table);
+             
+             // 3. Update the UI summary totals using the calculated raw milliseconds
+             renderReportSummary(netWorkTimeFormatted, msToHours(totalWorkTimeMs));
+         }
+         
+         // --- Render Main Log View based on isManagingLogs state ---
+         function renderMainLogView() {
+             if (isManagingLogs) {
+                 logViewTitleEl.textContent = 'Raw Log Events (Edit/Delete)';
+                 logFooterTextEl.textContent = 'Correcting these timestamps will automatically update the report.';
+                 manageLogsBtn.textContent = 'View Report Segments';
+                 renderRawLogEvents();
+             } else {
+                 logViewTitleEl.textContent = 'Time Log Segments (For Reporting)';
+                 logFooterTextEl.textContent = 'Calculated time spans since the last report cutoff.';
+                 manageLogsBtn.textContent = 'Manage Log Events';
+                 renderTimeLogSegments(currentReportData.segments, currentReportData.totalWorkTimeMs, currentReportData.totalBreakTimeMs);
+             }
+         }
+         
+         // --- Log Management Handlers ---
+         
+         window.handleLogViewToggle = function() {
+             isManagingLogs = !isManagingLogs;
+             renderMainLogView();
+         }
+         
+         window.handleEditEvent = function(logId, logType, logTimestamp) {
+             const date = new Date(logTimestamp);
+             
+             // Format date to YYYY-MM-DD
+             const year = date.getFullYear();
+             const month = String(date.getMonth() + 1).padStart(2, '0');
+             const day = String(date.getDate()).padStart(2, '0');
+             const dateValue = `${year}-${month}-${day}`;
+         
+             // Format time to HH:MM (24-hour)
+             const hours = String(date.getHours()).padStart(2, '0');
+             const minutes = String(date.getMinutes()).padStart(2, '0');
+             const timeValue = `${hours}:${minutes}`;
+         
+             // Populate the modal
+             editingLogIdEl.value = logId;
+             editingLogTypeEl.textContent = logType;
+             editDateEl.value = dateValue;
+             editTimeEl.value = timeValue;
+         
+             // Show the modal
+             editLogModal.classList.remove('hidden');
+             editLogModal.classList.add('flex');
+         }
+         
+         window.handleSaveEdit = async function() {
+             const logId = editingLogIdEl.value;
+             const newDateStr = editDateEl.value;
+             const newTimeStr = editTimeEl.value;
+             
+             if (!logId || !newDateStr || !newTimeStr) {
+                 showMessage("Input Error", "Please select both a valid date and time.", true);
+                 return;
+             }
+         
+             // Combine date and time to create a new timestamp
+             const newTimestampISO = new Date(`${newDateStr}T${newTimeStr}:00`).toISOString();
+         
+             hideEditModal();
+         
+             try {
+                 const logRef = doc(db, getTimeLogCollectionRef().path, logId);
+                 await updateDoc(logRef, {
+                     timestamp: newTimestampISO
+                 });
+                 showMessage("Log Updated", `Successfully updated log event ID: ${logId.substring(0, 8)}...`, false);
+             } catch (e) {
+                 console.error("Error updating log event:", e);
+                 showMessage("Update Failed", `Failed to update log event. Error: ${e.message}`, true);
+             }
+         }
+         
 
 	window.handleDeleteEvent = async function(logId, logType) { // 🟢 FIX: logType must be defined here
-    // The alert uses logType to confirm the deletion (prevents the ReferenceError)
-    if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
-        return;
-    }
-    
-    try {
-        const logRef = doc(db, getTimeLogCollectionRef().path, logId);
-        await deleteDoc(logRef);
-        // Uses the logType argument for the success message
-        showMessage("Log Deleted", `Successfully deleted log event: ${logType}`, false); 
-    } catch (e) {
-        console.error("Error deleting log event:", e);
-        showMessage("Delete Failed", `Failed to delete log event. Error: ${e.message}`, true);
-    }
+    // The alert uses logType to confirm the deletion (prevents the ReferenceError)
+    if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
+        return;
+    }
+    
+    try {
+        const logRef = doc(db, getTimeLogCollectionRef().path, logId);
+        await deleteDoc(logRef);
+        // Uses the logType argument for the success message
+        showMessage("Log Deleted", `Successfully deleted log event: ${logType}`, false); 
+    } catch (e) {
+        console.error("Error deleting log event:", e);
+        showMessage("Delete Failed", `Failed to delete log event. Error: ${e.message}`, true);
+    }
 }
-         
-         // --- Firestore Path Functions (ALL PUBLIC/SHARED) ---
-         
-         function getReportStateRef() {
-             const docPath = `artifacts/${appId}/public/data/state/report_cutoff`;
-             return doc(db, docPath);
-         }
-         
-         function getTimeLogCollectionRef() {
-             const collectionPath = `artifacts/${appId}/public/data/timeLogs`;
-             return collection(db, collectionPath);
-         }
-         
-         function getClockStateRef() {
-             const docPath = `artifacts/${appId}/public/data/state/clock_status`;
-             return doc(db, docPath);
-         }
-         
-         function getPublicTasksCollectionRef() {
-             const collectionPath = `artifacts/${appId}/public/data/tasks`;
-             return collection(db, collectionPath);
-         }
-         
-         async function logTimeEvent(type) {
-              if (!db || !userId) return;
-              try {
-                 const logRef = getTimeLogCollectionRef();
-                 await addDoc(logRef, {
-                     type: type,
-                     timestamp: new Date().toISOString()
-                 });
-             } catch (e) {
-                 console.error("Error logging time event:", e);
-                 showMessage("Log Error", `Failed to record ${type} event.`, true);
-             }
-         }
-         
-         /**
-          * Sends the final report data to the Apps Script backend.
-          * NOTE: This function requires the HTML to be served as a GAS Web App.
-         */
-         function sendReportDataToServer(reportData, timestamp) {
-          if (typeof google === 'undefined' || !google.script || !google.script.run) {
-            showMessage("Error", "Google Apps Script API not available. Cannot sync report.", true);
-             return;
-          }
-         
-           const netWorkMs = reportData.totalWorkTimeMs - reportData.totalBreakTimeMs;
-           const netWorkTimeFormatted = msToHours(netWorkMs);
-         
-           const dataToSend = {
-               cutoffTimestamp: timestamp,
-               totalWorkHours: netWorkTimeFormatted,
-               totalBreakHours: msToHours(reportData.totalBreakTimeMs)
-            };
-         
-           // Call the backend GAS function
-           google.script.run
-              .withSuccessHandler(() => {
-                  showMessage("Report Synced", "Report data successfully saved to the Google Sheet.", false);
-              })
-              .withFailureHandler(error => {
-                   console.error("Backend Sync Failed:", error);
-                   showMessage("Sync Failed", "Could not write data to Google Sheet. Check GAS logs.", true);
-               })
-              .recordFinalReport(dataToSend);
-           }
-         
-         /**
-          * Loads and listens for all real-time state changes from Firestore.
-          */
-         function loadStateFromFirestore() {
-             if (!db || !userId) {
-                 console.error("Database or User ID is not initialized.");
-                 return;
-             }
-             
-             // 1. Listen to the SHARED Clock/Break status
-             const clockRef = getClockStateRef();
-             onSnapshot(clockRef, async (docSnapshot) => {
-                 if (docSnapshot.exists()) {
-                     const sharedData = docSnapshot.data();
-                     currentState.isClockedIn = sharedData.isClockedIn || false;
-                     currentState.isUserOnBreak = sharedData.isUserOnBreak || false;
-                 } else {
-                     await setDoc(clockRef, { isClockedIn: false, isUserOnBreak: false });
-                 }
-                 renderStatus(); 
-             }, (error) => {
-                 console.error("Error setting up clock listener:", error);
-             });
-         
-             // 2. Listen to the SHARED Report Cutoff Timestamp
-             const reportStateRef = getReportStateRef();
-             onSnapshot(reportStateRef, async (docSnapshot) => {
-                 if (docSnapshot.exists()) {
-                     const reportData = docSnapshot.data();
-                     currentState.lastReportTimestamp = reportData.lastReportTimestamp || null; 
-                 } else {
-                     await setDoc(reportStateRef, { lastReportTimestamp: null });
-                 }
-                 // When timestamp updates, the logs listener (4) will re-run automatically.
-             }, (error) => {
-                 console.error("Error setting up report state listener:", error);
-             });
-         
-             // 3. Listen to the SHARED Tasks
-             const publicTasksRef = getPublicTasksCollectionRef();
-             onSnapshot(query(publicTasksRef, orderBy("createdAt", "desc")), (querySnapshot) => {
-                 taskLoadingEl.textContent = '';
-                 taskLoadingEl.classList.add('hidden');
-                 
-                 const publicTasks = [];
-                 querySnapshot.forEach(doc => {
-                     publicTasks.push({ id: doc.id, ...doc.data() });
-                 });
-                 currentState.tasks = publicTasks;
-                 renderTasks();
-             }, (error) => {
-                 console.error("Error setting up public task listener:", error);
-                 taskLoadingEl.textContent = 'Error loading shared tasks.';
-             });
-             
-             // 4. Listen to the SHARED Time Logs (FULL HISTORY)
-             const logsQuery = query(getTimeLogCollectionRef(), orderBy("timestamp", "desc"));
-             onSnapshot(logsQuery, (querySnapshot) => {
-                 historyLoadingEl.textContent = '';
-                 historyLoadingEl.classList.add('hidden');
-                 printReportBtn.disabled = false;
-                 markReportedBtn.disabled = false;
-                 
-                 const allLogs = [];
-                 querySnapshot.forEach(doc => {
-                     // CRITICAL CHANGE: Capture the document ID
-                     allLogs.push({ id: doc.id, ...doc.data() }); 
-                 });
-                 rawLogEvents = allLogs; // Store the raw events with IDs
-                 
-                 // Calculate time segments and totals based on current cutoff date
-                 // Note: calculateReportData sorts the logs internally by ascending timestamp
-                 const report = calculateReportData(allLogs, currentState.lastReportTimestamp);
-                 currentReportData = report; // Store the new calculated report data
-                 
-                 // Render the currently selected view (Segments or Raw Events)
-                 renderMainLogView();
-         
-             }, (error) => {
-                 console.error("Error setting up time log listener:", error);
-                 historyLoadingEl.textContent = 'Error loading session history.';
-             });
-         }
-         
-         async function saveSharedClockState() {
-             if (!db) return;
-             try {
-                 const clockRef = getClockStateRef();
-                 await setDoc(clockRef, {
-                     isClockedIn: currentState.isClockedIn,
-                     isUserOnBreak: currentState.isUserOnBreak
-                 });
-             } catch (e) {
-                 console.error("Error saving shared clock state:", e);
-                 showMessage("Save Error", "Failed to save shared clock status to the cloud database.", true);
-             }
-         }
-         
-         // --- Task CRUD Operations (Same as before) ---
-         
-         window.toggleTaskCompletion = async function(taskId, currentStatus) {
-             try {
-                 const taskRef = doc(db, getPublicTasksCollectionRef().path, taskId);
-                 await updateDoc(taskRef, {
-                     isCompleted: !currentStatus
-                 });
-             } catch (e) {
-                 console.error("Error toggling task completion:", e);
-                 showMessage("Task Error", "Failed to update task status.", true);
-             }
-         }
-         
-         window.deleteTask = async function(taskId) {
-              try {
-                 const taskRef = doc(db, getPublicTasksCollectionRef().path, taskId);
-                 await deleteDoc(taskRef);
-             } catch (e) {
-                 console.error("Error deleting task:", e);
-                 showMessage("Task Error", "Failed to delete task.", true);
-             }
-         }
-         
-         // --- Event Handlers (mostly same) ---
-         
-         window.handleClockToggle = async function() {
-             const newState = !currentState.isClockedIn;
-             
-             if (currentState.isClockedIn && currentState.isUserOnBreak) {
-                 // If clocking out while on break, log break end and clock out
-                 await logTimeEvent('BREAK_END');
-                 await logTimeEvent('CLOCK_OUT');
-                 
-                 currentState.isClockedIn = false;
-                 currentState.isUserOnBreak = false;
-                 showMessage("Session Ended", "Clocked out and ended break (synced).", false);
-             } else {
-                 const eventType = newState ? 'CLOCK_IN' : 'CLOCK_OUT';
-                 await logTimeEvent(eventType);
-                 currentState.isClockedIn = newState;
-                 if (!newState) {
-                     currentState.isUserOnBreak = false; 
-                 }
-                 showMessage(newState ? "Clocked In (Synced)!" : "Clocked Out (Synced)!", `You are now ${newState ? 'working' : 'off'}.`, false);
-             }
-             saveSharedClockState();
-         }
-         
-         window.handleBreakToggle = async function() {
-             if (!currentState.isClockedIn) {
-                 showMessage("Action Blocked", "You must be clocked in to start or end a break.", true);
-                 return;
-             }
-             
-             const newState = !currentState.isUserOnBreak;
-             const eventType = newState ? 'BREAK_START' : 'BREAK_END';
-             
-             await logTimeEvent(eventType);
-             currentState.isUserOnBreak = newState;
-             
-             showMessage(newState ? "Break Started (Synced)" : "Break Ended (Synced)", `Time logging is ${newState ? 'paused' : 'resumed'}.`, false);
-             saveSharedClockState();
-         }
-         
-         window.handleCalendarClick = function() {
-             showDatePicker = !showDatePicker;
-             if (showDatePicker) {
-                 dueDateContainerEl.classList.remove('hidden');
-             } else {
-                 dueDateContainerEl.classList.add('hidden');
-                 newDueDateEl.value = ''; 
-                 newDueDate = null; 
-             }
-         }
-         
-         window.handleAddTask = async function() {
-             const text = newTaskTextEl.value.trim();
-             
-             if (text.length < 3) {
-                 showMessage("Input Required", "Please enter a task description that is at least 3 characters long.", true);
-                 return;
-             }
-             
-             if (!db || !userId) {
-                 showMessage("DB Error", "Authentication not ready. Cannot add task.", true);
-                 return;
-             }
-             
-             try {
-                 const publicTasksRef = getPublicTasksCollectionRef();
-                 await addDoc(publicTasksRef, {
-                     text: text,
-                     isCompleted: false,
-                     ownerId: userId,
-                     createdAt: new Date(),
-                     dueDate: newDueDate || null 
-                 });
-                 
-                 newTaskTextEl.value = '';
-                 newDueDateEl.value = '';
-                 newDueDate = null;
-                 showDatePicker = false;
-                 dueDateContainerEl.classList.add('hidden'); 
-                 
-                 showMessage("Task Added", `Synced task '${text}' added!`, false);
-             } catch (e) {
-                 console.error("Error adding public task:", e);
-                 showMessage("Save Error", `Failed to save public task. Error: ${e.message}`, true);
-             }
-         }
-         
-         window.handlePrintReport = function() {
-             // This function triggers the print dialogue, relying on the @media print CSS to format the output.
-             window.print();
-         }
-         
-         window.handleMarkReported = async function() {
-             if (!db || !userId) return;
-             const now = new Date().toISOString();
-             try {
-                 sendReportDataToServer(currentReportData, now);
-                 const reportStateRef = getReportStateRef();
-         
-                 await updateDoc(reportStateRef, {
-                     lastReportTimestamp: now
-                 });
-                 
-                 showMessage("Report Cleared", "All current hours have been marked as reported. The report summary is reset.", false);
-         
-             } catch (e) {
-                 console.error("Error marking hours as reported:", e);
-                 showMessage("Report Error", `Failed to mark hours as reported: ${e.message}`, true);
-             }
-         }
-         
-         
+         
+         // --- Firestore Path Functions (ALL PUBLIC/SHARED) ---
+         
+         function getReportStateRef() {
+             const docPath = `artifacts/${appId}/public/data/state/report_cutoff`;
+             return doc(db, docPath);
+         }
+         
+         function getTimeLogCollectionRef() {
+             const collectionPath = `artifacts/${appId}/public/data/timeLogs`;
+             return collection(db, collectionPath);
+         }
+         
+         function getClockStateRef() {
+             const docPath = `artifacts/${appId}/public/data/state/clock_status`;
+             return doc(db, docPath);
+         }
+         
+         function getPublicTasksCollectionRef() {
+             const collectionPath = `artifacts/${appId}/public/data/tasks`;
+             return collection(db, collectionPath);
+         }
+         
+         async function logTimeEvent(type) {
+              if (!db || !userId) return;
+              try {
+                 const logRef = getTimeLogCollectionRef();
+                 await addDoc(logRef, {
+                     type: type,
+                     timestamp: new Date().toISOString()
+                 });
+             } catch (e) {
+                 console.error("Error logging time event:", e);
+                 showMessage("Log Error", `Failed to record ${type} event.`, true);
+             }
+         }
+         
+         /**
+          * Sends the final report data to the Apps Script backend.
+          * NOTE: This function requires the HTML to be served as a GAS Web App.
+         */
+         function sendReportDataToServer(reportData, timestamp) {
+          if (typeof google === 'undefined' || !google.script || !google.script.run) {
+            showMessage("Error", "Google Apps Script API not available. Cannot sync report.", true);
+             return;
+          }
+         
+           const netWorkMs = reportData.totalWorkTimeMs - reportData.totalBreakTimeMs;
+           const netWorkTimeFormatted = msToHours(netWorkMs);
+         
+           const dataToSend = {
+               cutoffTimestamp: timestamp,
+               totalWorkHours: netWorkTimeFormatted,
+               totalBreakHours: msToHours(reportData.totalBreakTimeMs)
+            };
+         
+           // Call the backend GAS function
+           google.script.run
+              .withSuccessHandler(() => {
+                  showMessage("Report Synced", "Report data successfully saved to the Google Sheet.", false);
+              })
+              .withFailureHandler(error => {
+                   console.error("Backend Sync Failed:", error);
+                   showMessage("Sync Failed", "Could not write data to Google Sheet. Check GAS logs.", true);
+               })
+              .recordFinalReport(dataToSend);
+           }
+         
+         /**
+          * Loads and listens for all real-time state changes from Firestore.
+          */
+         function loadStateFromFirestore() {
+             if (!db || !userId) {
+                 console.error("Database or User ID is not initialized.");
+                 return;
+             }
+             
+             // 1. Listen to the SHARED Clock/Break status
+             const clockRef = getClockStateRef();
+             onSnapshot(clockRef, async (docSnapshot) => {
+                 if (docSnapshot.exists()) {
+                     const sharedData = docSnapshot.data();
+                     currentState.isClockedIn = sharedData.isClockedIn || false;
+                     currentState.isUserOnBreak = sharedData.isUserOnBreak || false;
+                 } else {
+                     await setDoc(clockRef, { isClockedIn: false, isUserOnBreak: false });
+                 }
+                 renderStatus(); 
+             }, (error) => {
+                 console.error("Error setting up clock listener:", error);
+             });
+         
+             // 2. Listen to the SHARED Report Cutoff Timestamp
+             const reportStateRef = getReportStateRef();
+             onSnapshot(reportStateRef, async (docSnapshot) => {
+                 if (docSnapshot.exists()) {
+                     const reportData = docSnapshot.data();
+                     currentState.lastReportTimestamp = reportData.lastReportTimestamp || null; 
+                 } else {
+                     await setDoc(reportStateRef, { lastReportTimestamp: null });
+                 }
+                 // When timestamp updates, the logs listener (4) will re-run automatically.
+             }, (error) => {
+                 console.error("Error setting up report state listener:", error);
+             });
+         
+             // 3. Listen to the SHARED Tasks
+             const publicTasksRef = getPublicTasksCollectionRef();
+             onSnapshot(query(publicTasksRef, orderBy("createdAt", "desc")), (querySnapshot) => {
+                 taskLoadingEl.textContent = '';
+                 taskLoadingEl.classList.add('hidden');
+                 
+                 const publicTasks = [];
+                 querySnapshot.forEach(doc => {
+                     publicTasks.push({ id: doc.id, ...doc.data() });
+                 });
+                 currentState.tasks = publicTasks;
+                 renderTasks();
+             }, (error) => {
+                 console.error("Error setting up public task listener:", error);
+                 taskLoadingEl.textContent = 'Error loading shared tasks.';
+             });
+             
+             // 4. Listen to the SHARED Time Logs (FULL HISTORY)
+             const logsQuery = query(getTimeLogCollectionRef(), orderBy("timestamp", "desc"));
+             onSnapshot(logsQuery, (querySnapshot) => {
+                 historyLoadingEl.textContent = '';
+                 historyLoadingEl.classList.add('hidden');
+                 printReportBtn.disabled = false;
+                 markReportedBtn.disabled = false;
+                 
+                 const allLogs = [];
+                 querySnapshot.forEach(doc => {
+                     // CRITICAL CHANGE: Capture the document ID
+                     allLogs.push({ id: doc.id, ...doc.data() }); 
+                 });
+                 rawLogEvents = allLogs; // Store the raw events with IDs
+                 
+                 // Calculate time segments and totals based on current cutoff date
+                 // Note: calculateReportData sorts the logs internally by ascending timestamp
+                 const report = calculateReportData(allLogs, currentState.lastReportTimestamp);
+                 currentReportData = report; // Store the new calculated report data
+                 
+                 // Render the currently selected view (Segments or Raw Events)
+                 renderMainLogView();
+         
+             }, (error) => {
+                 console.error("Error setting up time log listener:", error);
+                 historyLoadingEl.textContent = 'Error loading session history.';
+             });
+         }
+         
+         async function saveSharedClockState() {
+             if (!db) return;
+             try {
+                 const clockRef = getClockStateRef();
+                 await setDoc(clockRef, {
+                     isClockedIn: currentState.isClockedIn,
+                     isUserOnBreak: currentState.isUserOnBreak
+                 });
+             } catch (e) {
+                 console.error("Error saving shared clock state:", e);
+                 showMessage("Save Error", "Failed to save shared clock status to the cloud database.", true);
+             }
+         }
+         
+         // --- Task CRUD Operations (Same as before) ---
+         
+         window.toggleTaskCompletion = async function(taskId, currentStatus) {
+             try {
+                 const taskRef = doc(db, getPublicTasksCollectionRef().path, taskId);
+                 await updateDoc(taskRef, {
+                     isCompleted: !currentStatus
+                 });
+             } catch (e) {
+                 console.error("Error toggling task completion:", e);
+                 showMessage("Task Error", "Failed to update task status.", true);
+             }
+         }
+         
+         window.deleteTask = async function(taskId) {
+              try {
+                 const taskRef = doc(db, getPublicTasksCollectionRef().path, taskId);
+                 await deleteDoc(taskRef);
+             } catch (e) {
+                 console.error("Error deleting task:", e);
+                 showMessage("Task Error", "Failed to delete task.", true);
+             }
+         }
+         
+         // --- Event Handlers (mostly same) ---
+         
+         window.handleClockToggle = async function() {
+             const newState = !currentState.isClockedIn;
+             
+             if (currentState.isClockedIn && currentState.isUserOnBreak) {
+                 // If clocking out while on break, log break end and clock out
+                 await logTimeEvent('BREAK_END');
+                 await logTimeEvent('CLOCK_OUT');
+                 
+                 currentState.isClockedIn = false;
+                 currentState.isUserOnBreak = false;
+                 showMessage("Session Ended", "Clocked out and ended break (synced).", false);
+             } else {
+                 const eventType = newState ? 'CLOCK_IN' : 'CLOCK_OUT';
+                 await logTimeEvent(eventType);
+                 currentState.isClockedIn = newState;
+                 if (!newState) {
+                     currentState.isUserOnBreak = false; 
+                 }
+                 showMessage(newState ? "Clocked In (Synced)!" : "Clocked Out (Synced)!", `You are now ${newState ? 'working' : 'off'}.`, false);
+             }
+             saveSharedClockState();
+         }
+         
+         window.handleBreakToggle = async function() {
+             if (!currentState.isClockedIn) {
+                 showMessage("Action Blocked", "You must be clocked in to start or end a break.", true);
+                 return;
+             }
+             
+             const newState = !currentState.isUserOnBreak;
+             const eventType = newState ? 'BREAK_START' : 'BREAK_END';
+             
+             await logTimeEvent(eventType);
+             currentState.isUserOnBreak = newState;
+             
+             showMessage(newState ? "Break Started (Synced)" : "Break Ended (Synced)", `Time logging is ${newState ? 'paused' : 'resumed'}.`, false);
+             saveSharedClockState();
+         }
+         
+         window.handleCalendarClick = function() {
+             showDatePicker = !showDatePicker;
+             if (showDatePicker) {
+                 dueDateContainerEl.classList.remove('hidden');
+             } else {
+                 dueDateContainerEl.classList.add('hidden');
+                 newDueDateEl.value = ''; 
+                 newDueDate = null; 
+             }
+         }
+         
+         window.handleAddTask = async function() {
+             const text = newTaskTextEl.value.trim();
+             
+             if (text.length < 3) {
+                 showMessage("Input Required", "Please enter a task description that is at least 3 characters long.", true);
+                 return;
+             }
+             
+             if (!db || !userId) {
+                 showMessage("DB Error", "Authentication not ready. Cannot add task.", true);
+                 return;
+             }
+             
+             try {
+                 const publicTasksRef = getPublicTasksCollectionRef();
+                 await addDoc(publicTasksRef, {
+                     text: text,
+                     isCompleted: false,
+                     ownerId: userId,
+                     createdAt: new Date(),
+                     dueDate: newDueDate || null 
+                 });
+                 
+                 newTaskTextEl.value = '';
+                 newDueDateEl.value = '';
+                 newDueDate = null;
+                 showDatePicker = false;
+                 dueDateContainerEl.classList.add('hidden'); 
+                 
+                 showMessage("Task Added", `Synced task '${text}' added!`, false);
+             } catch (e) {
+                 console.error("Error adding public task:", e);
+                 showMessage("Save Error", `Failed to save public task. Error: ${e.message}`, true);
+             }
+         }
+         
+         window.handlePrintReport = function() {
+             // This function triggers the print dialogue, relying on the @media print CSS to format the output.
+             window.print();
+         }
+         
+         window.handleMarkReported = async function() {
+             if (!db || !userId) return;
+             const now = new Date().toISOString();
+             try {
+                 sendReportDataToServer(currentReportData, now);
+                 const reportStateRef = getReportStateRef();
+         
+                 await updateDoc(reportStateRef, {
+                     lastReportTimestamp: now
+                 });
+                 
+                 showMessage("Report Cleared", "All current hours have been marked as reported. The report summary is reset.", false);
+         
+             } catch (e) {
+                 console.error("Error marking hours as reported:", e);
+                 showMessage("Report Error", `Failed to mark hours as reported: ${e.message}`, true);
+             }
+         }
+         
+         
 /**
- * Handles the entire Firebase initialization and authentication process.
- * This version uses Google Sign-In (OAuth) and authorization via Firestore check.
- */
+ * Handles the entire Firebase initialization and authentication process.
+ * This version uses Google Sign-In (OAuth) and authorization via Firestore check.
+ */
 async function initializeFirebaseAndAuth() {
-    try {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-        
-        // Use local persistence to keep the user signed in across sessions/reloads
-        await setPersistence(auth, browserLocalPersistence);
+    try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+        
+        // Use local persistence to keep the user signed in across sessions/reloads
+        await setPersistence(auth, browserLocalPersistence);
 
-        // --- Authentication Flow ---
-        onAuthStateChanged(auth, async (user) => {
-            // Disable all buttons immediately until state is determined
-            clockToggleBtn.disabled = true;
-            breakToggleBtn.disabled = true;
-            addTaskBtn.disabled = true;
-            printReportBtn.disabled = true;
-            markReportedBtn.disabled = true;
-            manageLogsBtn.disabled = true;
-            
-            if (user) {
-                const userEmail = user.email; 
+        // --- Authentication Flow ---
+        onAuthStateChanged(auth, async (user) => {
+            // Disable all buttons immediately until state is determined
+            clockToggleBtn.disabled = true;
+            breakToggleBtn.disabled = true;
+            addTaskBtn.disabled = true;
+            printReportBtn.disabled = true;
+            markReportedBtn.disabled = true;
+            manageLogsBtn.disabled = true;
+            
+            if (user) {
+                const userEmail = user.email; 
 
-                // 🛑 CRITICAL NULL CHECK: If the email is null or empty, the user session is bad.
-                if (!userEmail || userEmail.length === 0) {
-                    auth.signOut(); // Force immediate sign-out
-                    console.error("Authentication failed: User object returned with null or empty email.");
-                    showMessage("Login Failed", "Could not retrieve user email address. Please sign in again.", true);
-                    return; // Exit function and fall to the !user logic
-                }
-                
-                // 🟢 AUTHORIZATION CHECK
-                const isAuthorized = await checkAuthorization(userEmail);
-                
-                if (isAuthorized) {
-                    // User is authenticated AND authorized: proceed to load the app
-                    document.getElementById('login-container').classList.add('hidden'); // Hide login prompt
+                // 🛑 CRITICAL NULL CHECK: If the email is null or empty, the user session is bad.
+                if (!userEmail || userEmail.length === 0) {
+                    auth.signOut(); // Force immediate sign-out
+                    console.error("Authentication failed: User object returned with null or empty email.");
+                    showMessage("Login Failed", "Could not retrieve user email address. Please sign in again.", true);
+                    return; // Exit function and fall to the !user logic
+                }
+                
+                // 🟢 AUTHORIZATION CHECK
+                const isAuthorized = await checkAuthorization(userEmail);
+                
+                if (isAuthorized) {
+                    // User is authenticated AND authorized: proceed to load the app
+                    document.getElementById('login-container').classList.add('hidden'); // Hide login prompt
 
-                    userId = user.uid; // Keep tracking UID
-                    userIdDisplayEl.textContent = userEmail; // Display email for better user context
-                    userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer', 'text-red-500');
-                    
-                    // Enable all functional controls
-                    clockToggleBtn.disabled = false;
-                    breakToggleBtn.disabled = false;
-                    addTaskBtn.disabled = false;
-                    printReportBtn.disabled = false;
-                    markReportedBtn.disabled = false;
-                    manageLogsBtn.disabled = false;
-                    
-                    // Load real-time data for the authenticated user
-                    loadStateFromFirestore(); 
+                    userId = user.uid; // Keep tracking UID
+                    userIdDisplayEl.textContent = userEmail; // Display email for better user context
+                    userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer', 'text-red-500');
+                    
+                    // Enable all functional controls
+                    clockToggleBtn.disabled = false;
+                    breakToggleBtn.disabled = false;
+                    addTaskBtn.disabled = false;
+                    printReportBtn.disabled = false;
+                    markReportedBtn.disabled = false;
+                    manageLogsBtn.disabled = false;
+                    
+                    // Load real-time data for the authenticated user
+                    loadStateFromFirestore(); 
 
-                } else {
-                    // User is authenticated but NOT authorized: force sign-out and show access denied.
-                    auth.signOut(); // Log them out immediately
-                    document.getElementById('google-sign-in-btn').disabled = false;
-                    document.getElementById('google-sign-in-btn').textContent = "Access Denied";
-                    
-                    showMessage("Access Denied", `The Google account (${userEmail}) is not authorized to use this application.`, true);
-                    
-                    // Fall through to the 'else' block below to display the sign-in container
-                }
+                } else {
+                    // User is authenticated but NOT authorized: force sign-out and show access denied.
+                    auth.signOut(); // Log them out immediately
+                    document.getElementById('google-sign-in-btn').disabled = false;
+                    document.getElementById('google-sign-in-btn').textContent = "Access Denied";
+                    
+                    showMessage("Access Denied", `The Google account (${userEmail}) is not authorized to use this application.`, true);
+                    
+                    // Fall through to the 'else' block below to display the sign-in container
+                }
 
-            } 
-            
-            if (!user) {
-                // User is signed out or access was just denied.
-                document.getElementById('login-container').classList.remove('hidden');
-                
-                userIdDisplayEl.textContent = 'Signed Out';
-                userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
-                userIdDisplayEl.classList.add('text-red-500'); 
-            }
-        });
-        
-        // Custom token logic is removed/omitted.
+            } 
+            
+            if (!user) {
+                // User is signed out or access was just denied.
+                document.getElementById('login-container').classList.remove('hidden');
+                
+                userIdDisplayEl.textContent = 'Signed Out';
+                userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
+                userIdDisplayEl.classList.add('text-red-500'); 
+            }
+        });
+        
+        // Custom token logic is removed/omitted.
 
-    } catch (e) {
-        console.error("Firebase Initialization Error:", e);
-        userIdDisplayEl.textContent = 'Error (DB Failed)';
-        userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
-        showMessage("Initialization Failed", `Could not connect to Firebase: ${e.message}. The app is non-functional.`, true);
-    }
+    } catch (e) {
+        console.error("Firebase Initialization Error:", e);
+        userIdDisplayEl.textContent = 'Error (DB Failed)';
+        userIdDisplayEl.classList.remove('loading-text', 'loading-shimmer');
+        showMessage("Initialization Failed", `Could not connect to Firebase: ${e.message}. The app is non-functional.`, true);
+    }
 }
 
-         
-         // New function outside of initializeFirebaseAndAuth
-         window.handleGoogleSignIn = function() {
-    const auth = getAuth();
-    const provider = new GoogleAuthProvider();
+         
+         // New function outside of initializeFirebaseAndAuth
+         window.handleGoogleSignIn = function() {
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
 
-    signInWithPopup(auth, provider)
-    .then((result) => {
-        // Sign-in successful. onAuthStateChanged listener handles the rest.
-        console.log("Google Sign-in successful.");
-    })
-    .catch((error) => {
-        // Handle Errors (e.g., user closed the popup, or permission denied)
-        console.error("Google Sign-In Failed:", error);
-        
-        let errorMessage = `Reason: ${error.code}`;
-        if (error.code === 'auth/popup-closed-by-user') {
-             errorMessage = "Sign-in popup closed. Please try again.";
-        }
-        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
-    });
+    signInWithPopup(auth, provider)
+    .then((result) => {
+        // Sign-in successful. onAuthStateChanged listener handles the rest.
+        console.log("Google Sign-in successful.");
+    })
+    .catch((error) => {
+        // Handle Errors (e.g., user closed the popup, or permission denied)
+        console.error("Google Sign-In Failed:", error);
+        
+        let errorMessage = `Reason: ${error.code}`;
+        if (error.code === 'auth/popup-closed-by-user') {
+             errorMessage = "Sign-in popup closed. Please try again.";
+        }
+        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
+    });
 }
-         
-/**
- * Handles the Google Sign-In pop-up, triggered by the user clicking the button.
- */
+         
+ /**
+ * Handles the Google Sign-In pop-up, triggered by the user clicking the button.
+ */
 window.handleGoogleSignIn = function() {
-    const auth = getAuth();
-    const provider = new GoogleAuthProvider();
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
 
-    signInWithPopup(auth, provider)
-    .then((result) => {
-        // Sign-in successful. onAuthStateChanged listener handles UI update.
-        console.log("Google Sign-in successful.");
-    })
-    .catch((error) => {
-        // Handle Errors (e.g., user closed the popup, network issues)
-        console.error("Google Sign-In Failed:", error);
-        
-        let errorMessage = `Reason: ${error.code}`;
-        if (error.code === 'auth/popup-closed-by-user') {
-             errorMessage = "Sign-in popup closed. Please try again.";
-        }
-        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
-    });
+    signInWithPopup(auth, provider)
+    .then((result) => {
+        // Sign-in successful. onAuthStateChanged listener handles UI update.
+        console.log("Google Sign-in successful.");
+    })
+    .catch((error) => {
+        // Handle Errors (e.g., user closed the popup, network issues)
+        console.error("Google Sign-In Failed:", error);
+        
+        let errorMessage = `Reason: ${error.code}`;
+        if (error.code === 'auth/popup-closed-by-user') {
+             errorMessage = "Sign-in popup closed. Please try again.";
+        }
+        showMessage("Sign-in Failed", `Could not complete Google sign-in. ${errorMessage}`, true);
+    });
 }
 
 /**
- * Checks if the signed-in user's email exists in the Firestore authorizedUsers collection.
- * This function requires a single, valid document to exist with the user's email as the ID.
- * @param {string} email - The user's authenticated email address.
- * @returns {Promise<boolean>} True if authorized, false otherwise.
- */
+ * Checks if the signed-in user's email exists in the Firestore authorizedUsers collection.
+ * This function requires a single, valid document to exist with the user's email as the ID.
+ * @param {string} email - The user's authenticated email address.
+ * @returns {Promise<boolean>} True if authorized, false otherwise.
+ */
 async function checkAuthorization(email) {
-    if (!db) return false;
+    if (!db) return false;
 
-    // Normalize email to lowercase (as done in the database)
-    const normalizedEmail = email.toLowerCase();
-    
-    // Path: artifacts/{appId}/public/data/authorizedUsers/{email}
-    const authDocPath = `artifacts/${appId}/public/data/authorizedUsers/${normalizedEmail}`;
-    const authRef = doc(db, authDocPath);
-    
-    try {
-        // Fetch the single document
-        const docSnap = await getDoc(authRef); 
-        
-        // Authorization is granted if the document exists
-        return docSnap.exists();
-    } catch (e) {
-        console.error("Error checking authorization:", e);
-        // Fail safe: If there's a database error, assume not authorized
-        return false; 
-    }
+    // Normalize email to lowercase (as done in the database)
+    const normalizedEmail = email.toLowerCase();
+    
+    // Path: artifacts/{appId}/public/data/authorizedUsers/{email}
+    const authDocPath = `artifacts/${appId}/public/data/authorizedUsers/${normalizedEmail}`;
+    const authRef = doc(db, authDocPath);
+    
+    try {
+        // Fetch the single document
+        const docSnap = await getDoc(authRef); 
+        
+        // Authorization is granted if the document exists
+        return docSnap.exists();
+    } catch (e) {
+        console.error("Error checking authorization:", e);
+        // Fail safe: If there's a database error, assume not authorized
+        return false; 
+    }
 }
 
 /**
- * Fetches ALL raw log events from Firestore, serializes them into a JSON string,
- * and sends this string to the GAS backend for reliable writing to the Sheet.
- */
+ * Fetches ALL raw log events from Firestore, serializes them into a JSON string,
+ * and sends this string to the GAS backend for reliable writing to the Sheet.
+ */
 window.syncRawLogsToSheet = function() {
-    if (!userId) {
-        showMessage("Sync Error", "Please sign in before syncing data.", true);
-        return;
-    }
-    
-    if (rawLogEvents.length === 0) {
-        showMessage("Sync Status", "No log events found to sync.", false);
-        return;
-    }
+    if (!userId) {
+        showMessage("Sync Error", "Please sign in before syncing data.", true);
+        return;
+    }
+    
+    if (rawLogEvents.length === 0) {
+        showMessage("Sync Status", "No log events found to sync.", false);
+        return;
+    }
 
-    // 1. Filter to ensure we only process log objects with timestamps and types (which includes REPORTED)
-    const validRawLogs = rawLogEvents.filter(log => log.timestamp && log.type); 
+    // 1. Filter to ensure we only process log objects with timestamps and types (which includes REPORTED)
+    const validRawLogs = rawLogEvents.filter(log => log.timestamp && log.type); 
 
-    if (validRawLogs.length === 0) {
-        showMessage("Sync Status", "Log history contains no readable entries.", false);
-        return;
-    }
+    if (validRawLogs.length === 0) {
+        showMessage("Sync Status", "Log history contains no readable entries.", false);
+        return;
+    }
 
-    // 2. Map the data, enforcing all values are simple strings for serialization safety.
-    const simpleLogsArray = validRawLogs.map(log => {
-        // Guarantee simple string conversion for the final array structure: [Timestamp, Type, Status]
-        // NOTE: The 'REPORTED' entry's metadata is stored in the 'Status' field, so we must include it.
-        return [
-            String(log.timestamp) || 'CORRUPT_TIMESTAMP',
-            String(log.type) || 'ACTION_MISSING',
-            String(log.status || '') // Ensure the status (metadata) is included if it exists
-        ];
-    }).reverse(); // Reverse the order to show oldest logs first in the Sheet
+    // 2. Map the data, enforcing all values are simple strings for serialization safety.
+    const simpleLogsArray = validRawLogs.map(log => {
+        // Guarantee simple string conversion for the final array structure: [Timestamp, Type, Status]
+        // NOTE: The 'REPORTED' entry's metadata is stored in the 'Status' field, so we must include it.
+        return [
+            String(log.timestamp) || 'CORRUPT_TIMESTAMP',
+            String(log.type) || 'ACTION_MISSING',
+            String(log.status || '') // Ensure the status (metadata) is included if it exists
+        ];
+    }).reverse(); // Reverse the order to show oldest logs first in the Sheet
 
-    // 3. Serialize the entire array into a single JSON string for reliable transfer.
-    const jsonStringToSend = JSON.stringify(simpleLogsArray);
+    // 3. Serialize the entire array into a single JSON string for reliable transfer.
+    const jsonStringToSend = JSON.stringify(simpleLogsArray);
 
-    showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
+    showMessage("Syncing", "Transferring all log history to Google Sheet...", false);
 
-    // Call the correct GAS function
-    google.script.run
-        .withSuccessHandler(() => {
-            showMessage("Sync Complete", `Successfully synced ${simpleLogsArray.length} log entries to the spreadsheet.`, false);
-        })
-        .withFailureHandler(error => {
-            console.error("Sheet Sync Failed:", error);
-            showMessage("Sync Failed", `Could not write data to sheet. Error: ${error.message}`, true);
-        })
-        .writeRawLogsFromJson(jsonStringToSend); 
+    // Call the correct GAS function
+    google.script.run
+        .withSuccessHandler(() => {
+            showMessage("Sync Complete", `Successfully synced ${simpleLogsArray.length} log entries to the spreadsheet.`, false);
+        })
+        .withFailureHandler(error => {
+            console.error("Sheet Sync Failed:", error);
+            showMessage("Sync Failed", `Could not write data to sheet. Error: ${error.message}`, true);
+        })
+        .writeRawLogsFromJson(jsonStringToSend); 
 }
-         
-         // Start the application initialization when the window loads.
-         window.onload = initializeFirebaseAndAuth;
-         
-      </script>
-   </body>
+         
+         // Start the application initialization when the window loads.
+         window.onload = initializeFirebaseAndAuth;
+         
+      </script>
+   </body>
 </html>
