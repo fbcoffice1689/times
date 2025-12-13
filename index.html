@@ -779,18 +779,18 @@ function renderTasks() {
              table.className = 'print-table text-left w-full text-sm';
              
              table.innerHTML = `
-                 <thead class="bg-gray-200">
-                     <tr>
-                         <th class="p-2">Date</th>
-                         <th class="p-2">Activity</th> 
-                         <th class="p-2">Start Time</th>
-                         <th class="p-2">End Time</th>
-                         <th class="p-2 text-right">Duration</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                 </tbody>
-             `;
+                 <thead class="bg-gray-200">
+                     <tr>
+                         <th class="p-2">Date</th>
+                         <th class="p-2">Activity</th>
+                         <th class="p-2">Start Time</th>
+                         <th class="p-2">End Time</th>
+                         <th class="p-2 text-right">Duration</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                 </tbody>
+             `;
              const tbody = table.querySelector('tbody');
          
              segments.forEach(segment => {
