@@ -1141,32 +1141,54 @@ function renderTasks() {
          
          // --- Task CRUD Operations (Same as before) ---
          
-        async function toggleTaskCompletion(taskId, isCurrentlyCompleted) {
-		    const taskRef = doc(db, "apps", appId, "users", userId, "tasks", taskId);
-    const taskSnap = await getDoc(taskRef);
-    const taskData = taskSnap.data();
+window.toggleTaskCompletion = async function(taskId, isCurrentlyCompleted) {
+    if (!db || !userId) return;
 
-if (!isCurrentlyCompleted && taskData.frequency && taskData.frequency !== 'none') {
-    let nextDate = new Date();
-    if (taskData.frequency === 'daily') {
-        nextDate.setDate(nextDate.getDate() + 1);
-    } else if (taskData.frequency === 'weekly') {
-        nextDate.setDate(nextDate.getDate() + 7);
-    } else if (taskData.frequency === 'bi-weekly') {
-        nextDate.setDate(nextDate.getDate() + 14);
-    } else if (taskData.frequency === 'monthly') {
-        nextDate.setMonth(nextDate.getMonth() + 1);
+    try {
+        const publicTasksRef = getPublicTasksCollectionRef();
+        const taskRef = doc(publicTasksRef, taskId);
+        
+        // Fetch current task data to check for frequency
+        const taskSnap = await getDoc(taskRef);
+        if (!taskSnap.exists()) return;
+        const taskData = taskSnap.data();
+
+        // LOGIC: If we are marking a REPETITIVE task as "Done"
+        if (!isCurrentlyCompleted && taskData.frequency && taskData.frequency !== 'none') {
+            
+            // Use the existing due date as the base, or today if no due date exists
+            let baseDate = taskData.dueDate ? new Date(taskData.dueDate + 'T00:00:00') : new Date();
+            let nextDate = new Date(baseDate);
+
+            if (taskData.frequency === 'daily') {
+                nextDate.setDate(nextDate.getDate() + 1);
+            } else if (taskData.frequency === 'weekly') {
+                nextDate.setDate(nextDate.getDate() + 7);
+            } else if (taskData.frequency === 'bi-weekly') {
+                nextDate.setDate(nextDate.getDate() + 14);
+            } else if (taskData.frequency === 'monthly') {
+                nextDate.setMonth(nextDate.getMonth() + 1);
+            }
+
+            // Instead of marking complete, we just push the date forward
+            await updateDoc(taskRef, {
+                dueDate: nextDate.toISOString().split('T')[0],
+                isCompleted: false // Ensure it stays "unchecked" for the next interval
+            });
+            
+            showMessage("Recurring Task", "Task moved to next occurrence.", false);
+
+        } else {
+            // STANDARD LOGIC: Just toggle the completion status for one-time tasks
+            await updateDoc(taskRef, {
+                isCompleted: !isCurrentlyCompleted
+            });
+        }
+    } catch (e) {
+        console.error("Error toggling task:", e);
+        showMessage("Update Error", "Could not update task.", true);
     }
-    
-    await updateDoc(taskRef, {
-        dueDate: nextDate.toISOString().split('T')[0],
-        isCompleted: false 
-    });
-} else {
-        // Standard toggle for one-time tasks
-        await updateDoc(taskRef, { isCompleted: !isCurrentlyCompleted });
-    }
-}
+};
          
          window.deleteTask = async function(taskId) {
               try {
