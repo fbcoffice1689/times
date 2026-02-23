@@ -519,7 +519,7 @@ function renderTasks() {
     // --- 3. Empty State Check ---
     if (filteredTasks.length === 0) {
         // ✅ Responsive text size (text-sm)
-        tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due in the next two weeks.</p>';
+        tasksListEl.innerHTML = '<p class="text-center py-4 text-gray-500 text-sm">No tasks due this week.</p>';
         return;
     }
 
@@ -1145,18 +1145,18 @@ window.toggleTaskCompletion = async function(taskId, isCurrentlyCompleted) {
     if (!db || !userId) return;
 
     try {
+        // FIX: Use the shared publicTasksRef instead of the private user path
         const publicTasksRef = getPublicTasksCollectionRef();
         const taskRef = doc(publicTasksRef, taskId);
         
-        // Fetch current task data to check for frequency
         const taskSnap = await getDoc(taskRef);
         if (!taskSnap.exists()) return;
         const taskData = taskSnap.data();
 
-        // LOGIC: If we are marking a REPETITIVE task as "Done"
+        // Handle Repetitive Tasks: Calculate next date instead of finishing
         if (!isCurrentlyCompleted && taskData.frequency && taskData.frequency !== 'none') {
             
-            // Use the existing due date as the base, or today if no due date exists
+            // Base the next date on the current Due Date (Strict) or Today if missing
             let baseDate = taskData.dueDate ? new Date(taskData.dueDate + 'T00:00:00') : new Date();
             let nextDate = new Date(baseDate);
 
@@ -1170,23 +1170,22 @@ window.toggleTaskCompletion = async function(taskId, isCurrentlyCompleted) {
                 nextDate.setMonth(nextDate.getMonth() + 1);
             }
 
-            // Instead of marking complete, we just push the date forward
             await updateDoc(taskRef, {
                 dueDate: nextDate.toISOString().split('T')[0],
-                isCompleted: false // Ensure it stays "unchecked" for the next interval
+                isCompleted: false // Keeps it unchecked for the next cycle
             });
             
-            showMessage("Recurring Task", "Task moved to next occurrence.", false);
+            showMessage("Recurring Task", "Task moved to its next occurrence.", false);
 
         } else {
-            // STANDARD LOGIC: Just toggle the completion status for one-time tasks
+            // Standard toggle for one-time tasks
             await updateDoc(taskRef, {
                 isCompleted: !isCurrentlyCompleted
             });
         }
     } catch (e) {
         console.error("Error toggling task:", e);
-        showMessage("Update Error", "Could not update task.", true);
+        showMessage("Update Error", "Could not update task status.", true);
     }
 };
          
