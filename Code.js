@@ -328,3 +328,14 @@ function calculateReportFromSyncedLogs(startTime, endTime) {
   // 2. Return headers and sessions
   return reportHeaders.concat(sheetSessions);
 }
+
+/**
+ * Updates the entire reminder list. 
+ * Called from the HTML sidebar when a user saves changes.
+ * @param {Array} newList - The updated array of task objects.
+ */
+function updateReminderList(newList) {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.setProperty(REMINDER_LIST_KEY, JSON.stringify(newList));
+  return "List updated successfully!";
+}
