@@ -1419,24 +1419,36 @@ window.handleAddTask = async function() {
              window.print();
          }
          
-         window.handleMarkReported = async function() {
-             if (!db || !userId) return;
-             const now = new Date().toISOString();
-             try {
-                 sendReportDataToServer(currentReportData, now);
-                 const reportStateRef = getReportStateRef();
-         
-                 await updateDoc(reportStateRef, {
-                     lastReportTimestamp: now
-                 });
-                 
-                 showMessage("Report Cleared", "All current hours have been marked as reported. The report summary is reset.", false);
-         
-             } catch (e) {
-                 console.error("Error marking hours as reported:", e);
-                 showMessage("Report Error", `Failed to mark hours as reported: ${e.message}`, true);
-             }
-         }
+window.handleMarkReported = async function() {
+    if (!db || !userId) return;
+
+    // --- SAFETY MECHANISM ---
+    const confirmation = prompt("To confirm reporting and clearing these hours, please type 'REPORT' in the box below:");
+    
+    if (confirmation !== "REPORT") {
+        if (confirmation !== null) { // User typed something else
+            showMessage("Action Cancelled", "Incorrect confirmation text. Hours were not reported.", true);
+        }
+        return; // User cancelled or typed incorrectly
+    }
+    // ------------------------
+
+    const now = new Date().toISOString();
+    try {
+        sendReportDataToServer(currentReportData, now);
+        const reportStateRef = getReportStateRef();
+
+        await updateDoc(reportStateRef, {
+            lastReportTimestamp: now
+        });
+        
+        showMessage("Report Cleared", "All current hours have been marked as reported. The report summary is reset.", false);
+
+    } catch (e) {
+        console.error("Error marking hours as reported:", e);
+        showMessage("Report Error", `Failed to mark hours as reported: ${e.message}`, true);
+    }
+}
          
          
 /**

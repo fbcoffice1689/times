@@ -112,34 +112,42 @@ function formatMsToDuration(totalMilliseconds) {
  * Called by handleMarkReported() in index.html.
  * @param {Object} data - Contains cutoffTimestamp, totalWorkHours, totalBreakHours
  */
+/**
+ * Receives the final, aggregated report data from the client and writes it to a Sheet.
+ */
 function recordFinalReport(data) {
+  // Check if data exists to prevent the "TypeError"
+  if (!data || !data.cutoffTimestamp) {
+    Logger.log("Error: recordFinalReport was called with missing or null data.");
+    return "Error: No data received.";
+  }
+
   const sheetName = "Aggregated Reports";
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
-    // Set headers on a newly created sheet
     const headers = ["Report Date", "User ID", "Work Hours", "Break Hours", "Cutoff Timestamp"];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers])
          .setFontWeight("bold").setBackground("#d9ead3");
   }
   
-  // Format the report date
+  // Now it is safe to access cutoffTimestamp
   const reportDate = new Date(data.cutoffTimestamp).toLocaleDateString();
   const currentUserId = Session.getTemporaryActiveUserKey(); 
 
   const rowData = [
     reportDate,
     currentUserId,
-    data.totalWorkHours,
-    data.totalBreakHours,
+    data.totalWorkHours || "00:00:00",
+    data.totalBreakHours || "00:00:00",
     data.cutoffTimestamp
   ];
   
   sheet.appendRow(rowData);
-  
   Logger.log(`Aggregated Report recorded for user ${currentUserId} at ${reportDate}.`);
+  return "Success";
 }
 
 /**
