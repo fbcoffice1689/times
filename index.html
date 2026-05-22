@@ -76,6 +76,19 @@
          @media print {
          .no-print {
          display: none !important;
+         .print-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 15px;
+          }
+          .print-table th, .print-table td {
+              border: 1px solid #ccc;
+              padding: 8px;
+              text-align: left;
+          }
+          .print-table th {
+              background-color: #f3f4f6;
+          }
          }
          #log-history-list {
          max-height: none !important; /* Allows the content to expand fully */
@@ -231,24 +244,37 @@
 
     <div class="flex space-x-2 mb-4 no-print">
         
-        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="no-print bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150" title="Edit or Delete individual event logs">
+<div class="no-print flex flex-col sm:flex-row sm:items-center gap-3 w-full mt-4">
+    
+    <div class="flex items-center gap-2 w-full sm:w-auto">
+        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="flex-1 sm:flex-none bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold h-11 px-4 rounded-lg transition duration-150 whitespace-nowrap" title="Edit or Delete individual event logs">
             Manage Log Events
         </button>
         
         <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
-                class="no-print bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold p-3 rounded-xl transition duration-150" 
+                class="bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold rounded-lg transition duration-150 flex items-center justify-center shrink-0" 
                 title="Download Full Log History as CSV" 
-                style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                style="width: 44px; height: 44px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
         </button>
-        
-        <button id="print-report-btn" onclick="handlePrintReport()" class="no-print bg-green-500 hover:bg-green-600 text-white text-sm font-semibold py-2 px-4 rounded-lg transition duration-150 disabled:opacity-50" disabled>
+    </div>
+
+    <div class="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div class="flex-1 sm:flex-none flex flex-col text-left justify-center bg-gray-50 border border-gray-300 rounded-lg px-3 h-11 min-w-[140px]">
+            <label for="print-target-datepicker" class="text-[9px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-0.5">Prior Target</label>
+            <input type="date" id="print-target-datepicker" class="bg-transparent text-xs font-semibold text-gray-700 outline-none cursor-pointer focus:text-indigo-600 leading-none p-0 border-0 m-0">
+        </div>
+
+        <button id="print-report-btn" onclick="handlePrintReport()" class="bg-green-500 hover:bg-green-600 text-white text-sm font-semibold h-11 px-4 rounded-lg transition duration-150 disabled:opacity-50 whitespace-nowrap" disabled>
             Print Report
         </button>
+    </div>
+
+</div>
     </div>
     
     <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
@@ -1414,10 +1440,143 @@ window.handleAddTask = async function() {
     }
 }
          
-         window.handlePrintReport = function() {
-             // This function triggers the print dialogue, relying on the @media print CSS to format the output.
-             window.print();
-         }
+window.handlePrintReport = function() {
+    // 1. Prompt user to choose whether they want the active layout sheet or an archival layout sheet
+    const printPrior = confirm("Would you like to print a PRIOR time sheet?\n\n- Click 'OK' to fetch logs surrounding the date selected in the target picker.\n- Click 'Cancel' to print the CURRENT Time Sheet.");
+    
+    // CASE A: User clicked 'Cancel' -> Run standard native printing immediately on the current dashboard view
+    if (!printPrior) {
+        const originalTitle = document.title;
+        document.title = isManagingLogs ? "Raw_Log_Events_Audit_Report" : "Current_Time_Log_Report";
+        window.print();
+        document.title = originalTitle;
+        return;
+    }
+
+    // CASE B: User clicked 'OK' -> Target calculation range generation
+    if (!currentState.lastReportTimestamp) {
+        showMessage("No Prior Sheet", "There is no record of a previous report cutoff. Cannot generate a prior time sheet.", true);
+        return;
+    }
+
+    // Capture the chosen date value from our newly integrated HTML input picker element
+    const pickerEl = document.getElementById('print-target-datepicker');
+    if (!pickerEl || !pickerEl.value) {
+        showMessage("Select a Date", "Please pick a target date from the selector next to the Print button before searching prior reports.", true);
+        return;
+    }
+
+    const selectedTargetMs = new Date(pickerEl.value + 'T00:00:00').getTime();
+    
+    // Sort all raw logs chronologically (oldest first)
+    const sortedLogs = [...rawLogEvents].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    // Set our upper boundary ceiling lock to your last reported tracking state timestamp
+    const targetCutoffMs = new Date(currentState.lastReportTimestamp).getTime();
+
+    // Isolate unique CLOCK_IN events that lived prior to or equal to our active report cutoff ceiling
+    const historicalClockIns = sortedLogs.filter(log => 
+        log.type === 'CLOCK_IN' && new Date(log.timestamp).getTime() <= targetCutoffMs
+    );
+
+    if (historicalClockIns.length === 0) {
+        showMessage("No Options Found", "No historical clock entries exist in database streams.", true);
+        return;
+    }
+
+    // Separate options into two distinct arrays: those before the target date, and those after/on the target date
+    const logsBeforeTarget = historicalClockIns.filter(log => new Date(log.timestamp).getTime() < selectedTargetMs);
+    const logsAfterTarget = historicalClockIns.filter(log => new Date(log.timestamp).getTime() >= selectedTargetMs);
+
+    // Grab the 5 closest logs occurring BEFORE the selected target date (the last 5 entries of this chunk)
+    const closestBefore = logsBeforeTarget.slice(-5);
+    
+    // Grab the 5 closest logs occurring AFTER the selected target date (the first 5 entries of this chunk)
+    const closestAfter = logsAfterTarget.slice(0, 5);
+
+    // Merge them back together to create a neat 10-log rolling neighborhood array centered on your chosen date
+    const mergedNeighborhood = [...closestBefore, ...closestAfter];
+
+    // Compile unique, printable string references for the user prompt layout selections
+    const uniqueOptions = [];
+    mergedNeighborhood.forEach(log => {
+        const d = new Date(log.timestamp);
+        const formattedStr = `${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        
+        if (!uniqueOptions.some(opt => opt.text === formattedStr)) {
+            uniqueOptions.push({
+                text: formattedStr,
+                timeMs: d.getTime()
+            });
+        }
+    });
+
+    // Build the dynamic selection prompt text layout window
+    let promptMessage = `Displaying the closest 10 start choices relative to ${new Date(selectedTargetMs).toLocaleDateString()}:\n`;
+    promptMessage += "Type the NUMBER next to your starting cutoff boundary choice and click OK:\n\n";
+    uniqueOptions.forEach((opt, index) => {
+        promptMessage += `[ ${index + 1} ]  Start: ${opt.text}\n`;
+    });
+
+    const userSelectionInput = prompt(promptMessage, "1");
+
+    // Exit cleanly if they press escape, close the field, or hit cancel on the range picker index prompt
+    if (userSelectionInput === null) return;
+
+    const selectionIndex = parseInt(userSelectionInput.trim(), 10) - 1;
+
+    if (isNaN(selectionIndex) || selectionIndex < 0 || selectionIndex >= uniqueOptions.length) {
+        showMessage("Invalid Entry", "You must enter a valid numeric item value matching an option inside the list.", true);
+        return;
+    }
+
+    // Extract the precise lower millisecond timestamp limit chosen by the user
+    const priorCutoffMs = uniqueOptions[selectionIndex].timeMs;
+
+    // Slice out all logs that live safely within the chosen bounding timestamps
+    const priorLogsSlice = rawLogEvents.filter(log => {
+        const t = new Date(log.timestamp).getTime();
+        // Offset boundary buffer by 1 second to ensure the initial clock-in event is fully encapsulated
+        return t >= (priorCutoffMs - 1000) && t <= targetCutoffMs;
+    });
+
+    // Preserve the visual state of the live layout container before overwriting elements for printing
+    const originalContent = logHistoryListEl.innerHTML;
+    const originalTitle = document.title;
+
+    // Lock active clock ticking computations during the print stream processing cycle
+    const savedClockIn = currentState.isClockedIn;
+    currentState.isClockedIn = false; 
+
+    // Render historical log slice array totals through your computational data formulas engine
+    const priorReportData = calculateReportData(priorLogsSlice, null);
+    
+    // Unlock live tracking clock application variables
+    currentState.isClockedIn = savedClockIn;
+
+    // Direct injection into the rendering list element framework using your active layout styles
+    document.title = "Prior_Time_Log_Report";
+    renderTimeLogSegments(priorReportData.segments, priorReportData.totalWorkTimeMs, priorReportData.totalBreakTimeMs);
+    
+    // Alter page layouts headers to explicitly state the calculated date span of this archive document
+    const printHeader = logHistoryListEl.querySelector('.print-header');
+    if (printHeader) {
+        printHeader.innerHTML = `
+            <h1 class="text-xl font-bold mb-1">ARCHIVED Time Log Report</h1>
+            <p class="text-sm">Rosemary E. Pyles</p>
+            <p class="text-sm font-bold mt-2">TOTAL WORKED: ${msToHours(priorReportData.totalWorkTimeMs - priorReportData.totalBreakTimeMs)}</p>
+            <p class="text-xs">Period Range: ${new Date(priorCutoffMs).toLocaleDateString()} to ${new Date(targetCutoffMs).toLocaleDateString()}</p>
+        `;
+    }
+
+    // Launch core browser system printer configuration menu interface frames
+    window.print();
+
+    // Rollback structural dashboard objects seamlessly to preserve real-time active interfaces
+    document.title = originalTitle;
+    logHistoryListEl.innerHTML = originalContent;
+    renderMainLogView(); 
+};
          
 window.handleMarkReported = async function() {
     if (!db || !userId) return;
