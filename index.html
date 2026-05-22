@@ -1441,11 +1441,14 @@ window.handleAddTask = async function() {
 }
          
 window.handlePrintReport = function() {
-    // 1. Prompt user to choose whether they want the active layout sheet or an archival layout sheet
-    const printPrior = confirm("Would you like to print a PRIOR time sheet?\n\n- Click 'OK' to fetch logs surrounding the date selected in the target picker.\n- Click 'Cancel' to print the CURRENT Time Sheet.");
+    // 1. Check if a target date has been entered in the HTML date picker
+    const pickerEl = document.getElementById('print-target-datepicker');
+    const hasTargetDate = pickerEl && pickerEl.value;
     
-    // CASE A: User clicked 'Cancel' -> Run standard native printing immediately on the current dashboard view
-    if (!printPrior) {
+    // =========================================================================
+    // CASE A: NO DATE ENTERED -> Automatically print the CURRENT Time Sheet
+    // =========================================================================
+    if (!hasTargetDate) {
         const originalTitle = document.title;
         document.title = isManagingLogs ? "Raw_Log_Events_Audit_Report" : "Current_Time_Log_Report";
         window.print();
@@ -1453,19 +1456,17 @@ window.handlePrintReport = function() {
         return;
     }
 
-    // CASE B: User clicked 'OK' -> Target calculation range generation
+    // =========================================================================
+    // CASE B: DATE ENTERED -> Automatically calculate and print PRIOR Time Sheet
+    // =========================================================================
+    
+    // Verify a report cutoff baseline exists in the system database
     if (!currentState.lastReportTimestamp) {
         showMessage("No Prior Sheet", "There is no record of a previous report cutoff. Cannot generate a prior time sheet.", true);
         return;
     }
 
-    // Capture the chosen date value from our newly integrated HTML input picker element
-    const pickerEl = document.getElementById('print-target-datepicker');
-    if (!pickerEl || !pickerEl.value) {
-        showMessage("Select a Date", "Please pick a target date from the selector next to the Print button before searching prior reports.", true);
-        return;
-    }
-
+    // Parse the chosen picker date cleanly
     const selectedTargetMs = new Date(pickerEl.value + 'T00:00:00').getTime();
     
     // Sort all raw logs chronologically (oldest first)
@@ -1488,16 +1489,16 @@ window.handlePrintReport = function() {
     const logsBeforeTarget = historicalClockIns.filter(log => new Date(log.timestamp).getTime() < selectedTargetMs);
     const logsAfterTarget = historicalClockIns.filter(log => new Date(log.timestamp).getTime() >= selectedTargetMs);
 
-    // Grab the 5 closest logs occurring BEFORE the selected target date (the last 5 entries of this chunk)
+    // Grab up to 5 closest logs occurring BEFORE the selected target date (the last 5 entries of this chunk)
     const closestBefore = logsBeforeTarget.slice(-5);
     
-    // Grab the 5 closest logs occurring AFTER the selected target date (the first 5 entries of this chunk)
+    // Grab up to 5 closest logs occurring AFTER the selected target date (the first 5 entries of this chunk)
     const closestAfter = logsAfterTarget.slice(0, 5);
 
     // Merge them back together to create a neat 10-log rolling neighborhood array centered on your chosen date
     const mergedNeighborhood = [...closestBefore, ...closestAfter];
 
-    // Compile unique, printable string references for the user prompt layout selections
+    // Compile unique, printable string references for the selection prompt options
     const uniqueOptions = [];
     mergedNeighborhood.forEach(log => {
         const d = new Date(log.timestamp);
@@ -1512,7 +1513,7 @@ window.handlePrintReport = function() {
     });
 
     // Build the dynamic selection prompt text layout window
-    let promptMessage = `Displaying the closest 10 start choices relative to ${new Date(selectedTargetMs).toLocaleDateString()}:\n`;
+    let promptMessage = `Target Date Detected: ${new Date(selectedTargetMs).toLocaleDateString()}\n`;
     promptMessage += "Type the NUMBER next to your starting cutoff boundary choice and click OK:\n\n";
     uniqueOptions.forEach((opt, index) => {
         promptMessage += `[ ${index + 1} ]  Start: ${opt.text}\n`;
@@ -1520,7 +1521,7 @@ window.handlePrintReport = function() {
 
     const userSelectionInput = prompt(promptMessage, "1");
 
-    // Exit cleanly if they press escape, close the field, or hit cancel on the range picker index prompt
+    // Exit cleanly if they press escape or click cancel on the popup input window
     if (userSelectionInput === null) return;
 
     const selectionIndex = parseInt(userSelectionInput.trim(), 10) - 1;
@@ -1558,7 +1559,7 @@ window.handlePrintReport = function() {
     document.title = "Prior_Time_Log_Report";
     renderTimeLogSegments(priorReportData.segments, priorReportData.totalWorkTimeMs, priorReportData.totalBreakTimeMs);
     
-    // Alter page layouts headers to explicitly state the calculated date span of this archive document
+    // Alter page layout headers to explicitly state the calculated date span of this archive document
     const printHeader = logHistoryListEl.querySelector('.print-header');
     if (printHeader) {
         printHeader.innerHTML = `
