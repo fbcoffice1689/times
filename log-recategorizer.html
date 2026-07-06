@@ -197,6 +197,7 @@
     .field select{min-width:0;}
     table{font-size:12px;}
     thead th:nth-child(4), tbody td:nth-child(4){display:none;}
+    .row-delete{padding:5px 8px !important;}
   }
 </style>
 </head>
@@ -257,6 +258,7 @@
               <th>Current Type</th>
               <th>Recategorize To</th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="log-table-body">
@@ -278,6 +280,7 @@
       <option value="BREAK_END">Break End</option>
     </select>
     <button class="btn-primary" onclick="applyBulkRecategorize()">Apply to selected</button>
+    <button class="btn-danger" onclick="applyBulkDelete()">Delete selected</button>
     <button class="btn-ghost" style="color:#fff;border-color:#4b5563;" onclick="clearSelection()">Clear selection</button>
   </div>
 
@@ -295,7 +298,7 @@
     setPersistence, browserLocalPersistence
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
   import {
-    getFirestore, doc, getDoc, updateDoc, collection, query, orderBy, onSnapshot, writeBatch
+    getFirestore, doc, getDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, writeBatch
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
   const appId = __app_id;
@@ -456,6 +459,7 @@
           <select class="type-select">${optionsHtml}</select>
         </td>
         <td><button class="row-save ${isDirty ? 'dirty' : ''}" ${isDirty ? '' : 'disabled'}>Save</button></td>
+        <td><button class="row-delete btn-danger" style="padding:5px 10px;font-size:11px;">Delete</button></td>
       `;
 
       const checkbox = tr.querySelector('.row-check');
@@ -482,6 +486,9 @@
 
       saveBtn.addEventListener('click', () => saveSingleEdit(log.id, select.value, saveBtn));
 
+      const deleteBtn = tr.querySelector('.row-delete');
+      deleteBtn.addEventListener('click', () => deleteSingleEntry(log.id, currentType, log.timestamp, deleteBtn));
+
       tbody.appendChild(tr);
     });
 
@@ -501,6 +508,30 @@
       showToast('Save failed: ' + e.message, 'error');
       buttonEl.disabled = false;
       buttonEl.textContent = 'Save';
+    }
+  }
+
+  async function deleteSingleEntry(logId, type, timestamp, buttonEl) {
+    const d = new Date(timestamp);
+    const label = isNaN(d.getTime())
+      ? `this ${TYPE_LABELS[type] || type} event`
+      : `the ${TYPE_LABELS[type] || type} event from ${d.toLocaleString()}`;
+
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+
+    buttonEl.disabled = true;
+    buttonEl.textContent = 'Deleting…';
+    try {
+      const logRef = doc(db, `artifacts/${appId}/public/data/timeLogs`, logId);
+      await deleteDoc(logRef);
+      selectedIds.delete(logId);
+      delete dirtyEdits[logId];
+      showToast('Event deleted.', 'success');
+    } catch (e) {
+      console.error('Failed to delete entry:', e);
+      showToast('Delete failed: ' + e.message, 'error');
+      buttonEl.disabled = false;
+      buttonEl.textContent = 'Delete';
     }
   }
 
@@ -561,6 +592,28 @@
     } catch (e) {
       console.error('Bulk recategorize failed:', e);
       showToast('Bulk update failed: ' + e.message, 'error');
+    }
+  };
+
+  window.applyBulkDelete = async function () {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    if (!confirm(`Delete ${ids.length} event(s)? This cannot be undone.`)) return;
+
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        const ref = doc(db, `artifacts/${appId}/public/data/timeLogs`, id);
+        batch.delete(ref);
+      });
+      await batch.commit();
+      showToast(`${ids.length} event(s) deleted.`, 'success');
+      selectedIds.clear();
+      document.getElementById('select-all').checked = false;
+    } catch (e) {
+      console.error('Bulk delete failed:', e);
+      showToast('Bulk delete failed: ' + e.message, 'error');
     }
   };
 
