@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Time Log Recategorizer — Admin Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --ink:#1f2933;
+    --paper:#f7f5f0;
+    --line:#d8d3c7;
+    --line-strong:#b9b2a1;
+    --accent:#3a5a68;
+    --accent-dark:#26404b;
+    --work:#3f7d5c;
+    --work-bg:#e7f1ea;
+    --break:#a1592e;
+    --break-bg:#f6e8dd;
+    --danger:#b3392f;
+    --danger-bg:#f7e4e1;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  #root{max-width:960px;margin:0 auto;padding:28px 20px 80px;}
+
+  header.tool-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:20px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  header.tool-head h1{
+    font-size:19px;
+    letter-spacing:0.02em;
+    margin:0;
+    font-weight:700;
+  }
+  header.tool-head .tag{
+    font-family:var(--mono);
+    font-size:11px;
+    color:#6b7280;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+  }
+  #user-line{font-family:var(--mono);font-size:12px;color:#6b7280;}
+
+  .panel{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px 20px;
+    margin-bottom:18px;
+  }
+  .panel h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:#6b7280;
+    margin:0 0 12px;
+    font-weight:700;
+  }
+
+  #login-panel{display:none;text-align:center;padding:40px 20px;}
+  #login-panel p{color:#4b5563;margin-bottom:18px;}
+
+  .filters{display:flex;flex-wrap:wrap;gap:14px;align-items:end;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
+  .field input, .field select{
+    font-family:var(--sans);
+    font-size:13px;
+    padding:8px 10px;
+    border:1px solid var(--line-strong);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .field select{min-width:150px;}
+
+  button{
+    font-family:var(--sans);
+    cursor:pointer;
+    border:none;
+    border-radius:6px;
+    font-weight:600;
+    transition:background .12s ease, opacity .12s ease;
+  }
+  button:disabled{opacity:0.45;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:#fff;padding:9px 16px;font-size:13px;}
+  .btn-primary:hover:not(:disabled){background:var(--accent-dark);}
+  .btn-ghost{background:transparent;color:var(--accent);padding:8px 12px;font-size:13px;border:1px solid var(--line-strong);}
+  .btn-ghost:hover:not(:disabled){background:#f0eee7;}
+  .btn-danger{background:var(--danger);color:#fff;padding:8px 14px;font-size:13px;}
+  .btn-danger:hover:not(:disabled){background:#8e2e26;}
+  .btn-sign-in{background:var(--accent);color:#fff;padding:12px 24px;font-size:14px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:#6b7280;
+    padding:8px 10px;
+    border-bottom:2px solid var(--ink);
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:9px 10px;
+    border-bottom:1px solid var(--line);
+    vertical-align:middle;
+  }
+  tbody tr.selected{background:#eef3f1;}
+  tbody tr:hover{background:#faf9f6;}
+
+  .badge{
+    display:inline-block;
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:700;
+    padding:3px 8px;
+    border-radius:5px;
+    letter-spacing:0.02em;
+  }
+  .badge.CLOCK_IN{background:var(--work-bg);color:var(--work);}
+  .badge.CLOCK_OUT{background:var(--work-bg);color:var(--work);}
+  .badge.BREAK_START{background:var(--break-bg);color:var(--break);}
+  .badge.BREAK_END{background:var(--break-bg);color:var(--break);}
+
+  .type-select{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:5px 6px;
+    border:1px solid var(--line-strong);
+    border-radius:5px;
+    background:#fff;
+  }
+  .row-save{
+    font-family:var(--mono);
+    font-size:11px;
+    padding:5px 10px;
+  }
+  .row-save.dirty{background:var(--accent);color:#fff;}
+  .row-save:not(.dirty){background:#eee;color:#9ca3af;}
+
+  #bulk-bar{
+    position:sticky;
+    bottom:0;
+    display:none;
+    align-items:center;
+    gap:12px;
+    background:var(--ink);
+    color:#fff;
+    padding:12px 18px;
+    border-radius:10px;
+    margin-top:14px;
+    flex-wrap:wrap;
+  }
+  #bulk-bar .count{font-family:var(--mono);font-size:12px;color:#d1d5db;}
+  #bulk-bar select{padding:7px 9px;border-radius:6px;border:none;font-size:13px;}
+
+  #toast{
+    position:fixed;
+    top:20px;
+    right:20px;
+    max-width:340px;
+    background:var(--ink);
+    color:#fff;
+    padding:12px 16px;
+    border-radius:8px;
+    font-size:13px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.18);
+    display:none;
+    z-index:100;
+  }
+  #toast.error{background:var(--danger);}
+  #toast.success{background:var(--work);}
+
+  .empty-state{text-align:center;color:#9ca3af;padding:30px 0;font-size:13px;}
+  .loading-row{text-align:center;color:#9ca3af;padding:20px 0;font-size:13px;font-family:var(--mono);}
+  .footnote{font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.5;}
+
+  @media (max-width:640px){
+    .filters{flex-direction:column;align-items:stretch;}
+    .field select{min-width:0;}
+    table{font-size:12px;}
+    thead th:nth-child(4), tbody td:nth-child(4){display:none;}
+  }
+</style>
+</head>
+<body>
+<div id="root">
+
+  <header class="tool-head">
+    <div>
+      <h1>Time Log Recategorizer</h1>
+      <div class="tag">FBC Clinton · Time Clock Admin</div>
+    </div>
+    <div id="user-line">Connecting…</div>
+  </header>
+
+  <div id="login-panel" class="panel">
+    <p>Sign in with your authorized Google account to edit log events.</p>
+    <button class="btn-sign-in" onclick="handleSignIn()">Sign in with Google</button>
+  </div>
+
+  <div id="app-panels" style="display:none;">
+
+    <div class="panel">
+      <h2>Filter</h2>
+      <div class="filters">
+        <div class="field">
+          <label for="filter-from">From date</label>
+          <input type="date" id="filter-from">
+        </div>
+        <div class="field">
+          <label for="filter-to">To date</label>
+          <input type="date" id="filter-to">
+        </div>
+        <div class="field">
+          <label for="filter-type">Event type</label>
+          <select id="filter-type">
+            <option value="ALL">All types</option>
+            <option value="CLOCK_IN">Clock In</option>
+            <option value="CLOCK_OUT">Clock Out</option>
+            <option value="BREAK_START">Break Start</option>
+            <option value="BREAK_END">Break End</option>
+          </select>
+        </div>
+        <div class="field">
+          <button class="btn-ghost" onclick="clearFilters()">Clear filters</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Log Events</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Current Type</th>
+              <th>Recategorize To</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="log-table-body">
+            <tr><td colspan="6" class="loading-row">Awaiting sign-in…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footnote">Recategorizing changes only the event's <strong>type</strong> field (e.g. Break End → Clock In). It does not change the timestamp. Changes take effect immediately and will reflow into your reports and dashboard.</p>
+    </div>
+
+  </div>
+
+  <div id="bulk-bar">
+    <span class="count" id="bulk-count">0 selected</span>
+    <select id="bulk-type">
+      <option value="CLOCK_IN">Clock In</option>
+      <option value="CLOCK_OUT">Clock Out</option>
+      <option value="BREAK_START">Break Start</option>
+      <option value="BREAK_END">Break End</option>
+    </select>
+    <button class="btn-primary" onclick="applyBulkRecategorize()">Apply to selected</button>
+    <button class="btn-ghost" style="color:#fff;border-color:#4b5563;" onclick="clearSelection()">Clear selection</button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+  const __app_id = '1:271808577978:web:c2e0f745681401fe4f1d83';
+  const __firebase_config = '{"apiKey":"AIzaSyAGxZVLaHkowzF5ioMGGS9FnqMh31Zs5ds","authDomain":"timeclockapp-59694.firebaseapp.com","projectId":"timeclockapp-59694","storageBucket":"timeclockapp-59694.appspot.com","messagingSenderId":"271808577978","appId":"1:271808577978:web:c2e0f745681401fe4f1d83","measurementId":"G-6C1MRRFZTB"}';
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged,
+    setPersistence, browserLocalPersistence
+  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+  import {
+    getFirestore, doc, getDoc, updateDoc, collection, query, orderBy, onSnapshot, writeBatch
+  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+  const appId = __app_id;
+  const firebaseConfig = JSON.parse(__firebase_config);
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  let allLogs = [];       // full unfiltered log list from Firestore
+  let selectedIds = new Set();
+  let dirtyEdits = {};     // { logId: newType }
+
+  const TYPES = ['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END'];
+  const TYPE_LABELS = {
+    CLOCK_IN: 'Clock In',
+    CLOCK_OUT: 'Clock Out',
+    BREAK_START: 'Break Start',
+    BREAK_END: 'Break End'
+  };
+
+  function getTimeLogCollectionRef() {
+    return collection(db, `artifacts/${appId}/public/data/timeLogs`);
+  }
+
+  function showToast(message, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.className = '';
+    if (type === 'error') el.classList.add('error');
+    if (type === 'success') el.classList.add('success');
+    el.style.display = 'block';
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => { el.style.display = 'none'; }, 3800);
+  }
+
+  async function checkAuthorization(email) {
+    const normalizedEmail = email.toLowerCase();
+    const authRef = doc(db, `artifacts/${appId}/public/data/authorizedUsers/${normalizedEmail}`);
+    try {
+      const snap = await getDoc(authRef);
+      return snap.exists();
+    } catch (e) {
+      console.error('Authorization check failed:', e);
+      return false;
+    }
+  }
+
+  window.handleSignIn = function () {
+    const provider = new GoogleAuthProvider();
+    signInWithPopup(auth, provider).catch((error) => {
+      console.error('Sign-in failed:', error);
+      showToast('Sign-in failed: ' + error.code, 'error');
+    });
+  };
+
+  async function init() {
+    await setPersistence(auth, browserLocalPersistence);
+    onAuthStateChanged(auth, async (user) => {
+      const userLine = document.getElementById('user-line');
+      const loginPanel = document.getElementById('login-panel');
+      const appPanels = document.getElementById('app-panels');
+
+      if (!user) {
+        userLine.textContent = 'Signed out';
+        loginPanel.style.display = 'block';
+        appPanels.style.display = 'none';
+        return;
+      }
+
+      if (!user.email) {
+        auth.signOut();
+        showToast('Could not read account email. Please sign in again.', 'error');
+        return;
+      }
+
+      const authorized = await checkAuthorization(user.email);
+      if (!authorized) {
+        auth.signOut();
+        loginPanel.style.display = 'block';
+        appPanels.style.display = 'none';
+        userLine.textContent = 'Access denied';
+        showToast(`${user.email} is not authorized for this tool.`, 'error');
+        return;
+      }
+
+      userLine.textContent = user.email;
+      loginPanel.style.display = 'none';
+      appPanels.style.display = 'block';
+      subscribeToLogs();
+    });
+  }
+
+  function subscribeToLogs() {
+    const logsQuery = query(getTimeLogCollectionRef(), orderBy('timestamp', 'desc'));
+    onSnapshot(logsQuery, (snapshot) => {
+      allLogs = [];
+      snapshot.forEach((d) => allLogs.push({ id: d.id, ...d.data() }));
+      renderTable();
+    }, (error) => {
+      console.error('Log subscription error:', error);
+      document.getElementById('log-table-body').innerHTML =
+        `<tr><td colspan="6" class="loading-row">Error loading logs: ${error.message}</td></tr>`;
+    });
+  }
+
+  function getFilteredLogs() {
+    const fromVal = document.getElementById('filter-from').value;
+    const toVal = document.getElementById('filter-to').value;
+    const typeVal = document.getElementById('filter-type').value;
+
+    const fromMs = fromVal ? new Date(fromVal + 'T00:00:00').getTime() : null;
+    const toMs = toVal ? new Date(toVal + 'T23:59:59.999').getTime() : null;
+
+    return allLogs.filter((log) => {
+      if (!log.timestamp || !log.type) return false;
+      const t = new Date(log.timestamp).getTime();
+      if (fromMs !== null && t < fromMs) return false;
+      if (toMs !== null && t > toMs) return false;
+      if (typeVal !== 'ALL' && log.type !== typeVal) return false;
+      return true;
+    });
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('log-table-body');
+    const filtered = getFilteredLogs();
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No log events match this filter.</td></tr>`;
+      updateBulkBar();
+      return;
+    }
+
+    tbody.innerHTML = '';
+    filtered.forEach((log) => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = log.id;
+      if (selectedIds.has(log.id)) tr.classList.add('selected');
+
+      const d = new Date(log.timestamp);
+      const dateText = isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const timeText = isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+
+      const currentType = log.type;
+      const pendingType = dirtyEdits[log.id] || currentType;
+      const isDirty = pendingType !== currentType;
+
+      const optionsHtml = TYPES.map((t) =>
+        `<option value="${t}" ${t === pendingType ? 'selected' : ''}>${TYPE_LABELS[t]}</option>`
+      ).join('');
+
+      tr.innerHTML = `
+        <td><input type="checkbox" class="row-check" ${selectedIds.has(log.id) ? 'checked' : ''}></td>
+        <td>${dateText}</td>
+        <td style="font-family:var(--mono);">${timeText}</td>
+        <td><span class="badge ${currentType}">${TYPE_LABELS[currentType] || currentType}</span></td>
+        <td>
+          <select class="type-select">${optionsHtml}</select>
+        </td>
+        <td><button class="row-save ${isDirty ? 'dirty' : ''}" ${isDirty ? '' : 'disabled'}>Save</button></td>
+      `;
+
+      const checkbox = tr.querySelector('.row-check');
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) selectedIds.add(log.id);
+        else selectedIds.delete(log.id);
+        tr.classList.toggle('selected', checkbox.checked);
+        updateBulkBar();
+      });
+
+      const select = tr.querySelector('.type-select');
+      const saveBtn = tr.querySelector('.row-save');
+      select.addEventListener('change', () => {
+        if (select.value === currentType) {
+          delete dirtyEdits[log.id];
+          saveBtn.classList.remove('dirty');
+          saveBtn.disabled = true;
+        } else {
+          dirtyEdits[log.id] = select.value;
+          saveBtn.classList.add('dirty');
+          saveBtn.disabled = false;
+        }
+      });
+
+      saveBtn.addEventListener('click', () => saveSingleEdit(log.id, select.value, saveBtn));
+
+      tbody.appendChild(tr);
+    });
+
+    updateBulkBar();
+  }
+
+  async function saveSingleEdit(logId, newType, buttonEl) {
+    buttonEl.disabled = true;
+    buttonEl.textContent = 'Saving…';
+    try {
+      const logRef = doc(db, `artifacts/${appId}/public/data/timeLogs`, logId);
+      await updateDoc(logRef, { type: newType });
+      delete dirtyEdits[logId];
+      showToast('Event recategorized.', 'success');
+    } catch (e) {
+      console.error('Failed to save edit:', e);
+      showToast('Save failed: ' + e.message, 'error');
+      buttonEl.disabled = false;
+      buttonEl.textContent = 'Save';
+    }
+  }
+
+  window.toggleSelectAll = function (checkboxEl) {
+    const rows = document.querySelectorAll('#log-table-body tr[data-id]');
+    rows.forEach((tr) => {
+      const id = tr.dataset.id;
+      const cb = tr.querySelector('.row-check');
+      if (checkboxEl.checked) {
+        selectedIds.add(id);
+        cb.checked = true;
+        tr.classList.add('selected');
+      } else {
+        selectedIds.delete(id);
+        cb.checked = false;
+        tr.classList.remove('selected');
+      }
+    });
+    updateBulkBar();
+  };
+
+  window.clearSelection = function () {
+    selectedIds.clear();
+    document.getElementById('select-all').checked = false;
+    renderTable();
+  };
+
+  function updateBulkBar() {
+    const bar = document.getElementById('bulk-bar');
+    const countEl = document.getElementById('bulk-count');
+    if (selectedIds.size > 0) {
+      bar.style.display = 'flex';
+      countEl.textContent = `${selectedIds.size} selected`;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  window.applyBulkRecategorize = async function () {
+    const newType = document.getElementById('bulk-type').value;
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    if (!confirm(`Recategorize ${ids.length} event(s) as "${TYPE_LABELS[newType]}"? This cannot be undone automatically.`)) {
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        const ref = doc(db, `artifacts/${appId}/public/data/timeLogs`, id);
+        batch.update(ref, { type: newType });
+      });
+      await batch.commit();
+      showToast(`${ids.length} event(s) recategorized as ${TYPE_LABELS[newType]}.`, 'success');
+      selectedIds.clear();
+      document.getElementById('select-all').checked = false;
+    } catch (e) {
+      console.error('Bulk recategorize failed:', e);
+      showToast('Bulk update failed: ' + e.message, 'error');
+    }
+  };
+
+  window.clearFilters = function () {
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    document.getElementById('filter-type').value = 'ALL';
+    renderTable();
+  };
+
+  document.getElementById('filter-from').addEventListener('change', renderTable);
+  document.getElementById('filter-to').addEventListener('change', renderTable);
+  document.getElementById('filter-type').addEventListener('change', renderTable);
+
+  init();
+</script>
+</body>
+</html>
