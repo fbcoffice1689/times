@@ -147,6 +147,25 @@
     border-radius:5px;
     background:#fff;
   }
+  .time-display{
+    cursor:pointer;
+    border-bottom:1px dashed var(--line-strong);
+    padding-bottom:1px;
+  }
+  .time-display:hover{color:var(--accent);border-bottom-color:var(--accent);}
+  .time-display.time-pending{
+    color:var(--accent-dark);
+    font-weight:700;
+    border-bottom:1px dashed var(--accent-dark);
+  }
+  .time-edit-input{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:4px 6px;
+    border:1px solid var(--accent);
+    border-radius:5px;
+    width:150px;
+  }
   .row-save{
     font-family:var(--mono);
     font-size:11px;
@@ -266,7 +285,7 @@
           </tbody>
         </table>
       </div>
-      <p class="footnote">Recategorizing changes only the event's <strong>type</strong> field (e.g. Break End → Clock In). It does not change the timestamp. Changes take effect immediately and will reflow into your reports and dashboard.</p>
+      <p class="footnote">Recategorizing changes the event's <strong>type</strong> (e.g. Break End → Clock In). Double-click a <strong>time</strong> value to edit it directly as text (format: YYYY-MM-DD HH:MM:SS), then press Enter or click away to stage the change — it turns bold until you hit Save. One Save button commits both the type and time change together. Changes take effect immediately and will reflow into your reports and dashboard.</p>
     </div>
 
   </div>
@@ -310,6 +329,7 @@
   let allLogs = [];       // full unfiltered log list from Firestore
   let selectedIds = new Set();
   let dirtyEdits = {};     // { logId: newType }
+  let dirtyTimestamps = {}; // { logId: newIsoTimestamp }
 
   const TYPES = ['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END'];
   const TYPE_LABELS = {
@@ -422,6 +442,25 @@
     });
   }
 
+  function formatForEdit(d) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function parseEditedTimestamp(text) {
+    const trimmed = text.trim();
+    // Accept "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD HH:MM"
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(:(\d{2}))?$/);
+    if (!match) return null;
+    const [, y, mo, da, h, mi, , s] = match;
+    const d = new Date(
+      parseInt(y, 10), parseInt(mo, 10) - 1, parseInt(da, 10),
+      parseInt(h, 10), parseInt(mi, 10), s ? parseInt(s, 10) : 0
+    );
+    if (isNaN(d.getTime())) return null;
+    return d;
+  }
+
   function renderTable() {
     const tbody = document.getElementById('log-table-body');
     const filtered = getFilteredLogs();
@@ -440,11 +479,15 @@
 
       const d = new Date(log.timestamp);
       const dateText = isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      const timeText = isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+
+      const pendingIso = dirtyTimestamps[log.id];
+      const displayDate = pendingIso ? new Date(pendingIso) : d;
+      const timeText = isNaN(displayDate.getTime()) ? '—' : displayDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const timeIsDirty = !!pendingIso;
 
       const currentType = log.type;
       const pendingType = dirtyEdits[log.id] || currentType;
-      const isDirty = pendingType !== currentType;
+      const isDirty = pendingType !== currentType || timeIsDirty;
 
       const optionsHtml = TYPES.map((t) =>
         `<option value="${t}" ${t === pendingType ? 'selected' : ''}>${TYPE_LABELS[t]}</option>`
@@ -453,7 +496,7 @@
       tr.innerHTML = `
         <td><input type="checkbox" class="row-check" ${selectedIds.has(log.id) ? 'checked' : ''}></td>
         <td>${dateText}</td>
-        <td style="font-family:var(--mono);">${timeText}</td>
+        <td style="font-family:var(--mono);"><span class="time-display ${timeIsDirty ? 'time-pending' : ''}" title="Double-click to edit">${timeText}</span></td>
         <td><span class="badge ${currentType}">${TYPE_LABELS[currentType] || currentType}</span></td>
         <td>
           <select class="type-select">${optionsHtml}</select>
@@ -472,16 +515,53 @@
 
       const select = tr.querySelector('.type-select');
       const saveBtn = tr.querySelector('.row-save');
+
+      function refreshSaveState() {
+        const typeChanged = select.value !== currentType;
+        const timeChanged = !!dirtyTimestamps[log.id];
+        const dirty = typeChanged || timeChanged;
+        saveBtn.classList.toggle('dirty', dirty);
+        saveBtn.disabled = !dirty;
+      }
+
       select.addEventListener('change', () => {
-        if (select.value === currentType) {
-          delete dirtyEdits[log.id];
-          saveBtn.classList.remove('dirty');
-          saveBtn.disabled = true;
-        } else {
-          dirtyEdits[log.id] = select.value;
-          saveBtn.classList.add('dirty');
-          saveBtn.disabled = false;
+        if (select.value === currentType) delete dirtyEdits[log.id];
+        else dirtyEdits[log.id] = select.value;
+        refreshSaveState();
+      });
+
+      const timeSpan = tr.querySelector('.time-display');
+      timeSpan.addEventListener('dblclick', () => {
+        const baseDate = dirtyTimestamps[log.id] ? new Date(dirtyTimestamps[log.id]) : d;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'time-edit-input';
+        input.value = formatForEdit(baseDate);
+        timeSpan.replaceWith(input);
+        input.focus();
+        input.select();
+
+        function commitEdit() {
+          const parsed = parseEditedTimestamp(input.value);
+          if (!parsed) {
+            showToast('Could not read that timestamp. Use format YYYY-MM-DD HH:MM:SS.', 'error');
+            renderTable();
+            return;
+          }
+          const newIso = parsed.toISOString();
+          if (newIso === log.timestamp) {
+            delete dirtyTimestamps[log.id];
+          } else {
+            dirtyTimestamps[log.id] = newIso;
+          }
+          renderTable();
         }
+
+        input.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); commitEdit(); }
+          if (ev.key === 'Escape') { ev.preventDefault(); renderTable(); }
+        });
+        input.addEventListener('blur', commitEdit);
       });
 
       saveBtn.addEventListener('click', () => saveSingleEdit(log.id, select.value, saveBtn));
@@ -498,11 +578,22 @@
   async function saveSingleEdit(logId, newType, buttonEl) {
     buttonEl.disabled = true;
     buttonEl.textContent = 'Saving…';
+    const updates = {};
+    if (dirtyEdits[logId] !== undefined) updates.type = newType;
+    if (dirtyTimestamps[logId] !== undefined) updates.timestamp = dirtyTimestamps[logId];
+
+    if (Object.keys(updates).length === 0) {
+      buttonEl.disabled = true;
+      buttonEl.textContent = 'Save';
+      return;
+    }
+
     try {
       const logRef = doc(db, `artifacts/${appId}/public/data/timeLogs`, logId);
-      await updateDoc(logRef, { type: newType });
+      await updateDoc(logRef, updates);
       delete dirtyEdits[logId];
-      showToast('Event recategorized.', 'success');
+      delete dirtyTimestamps[logId];
+      showToast('Event updated.', 'success');
     } catch (e) {
       console.error('Failed to save edit:', e);
       showToast('Save failed: ' + e.message, 'error');
@@ -526,6 +617,7 @@
       await deleteDoc(logRef);
       selectedIds.delete(logId);
       delete dirtyEdits[logId];
+      delete dirtyTimestamps[logId];
       showToast('Event deleted.', 'success');
     } catch (e) {
       console.error('Failed to delete entry:', e);
