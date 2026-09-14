@@ -426,6 +426,50 @@
     });
   }
 
+
+  // --- BACKUP UTILITIES ---
+  window.exportLogsAsJSON = async function() {
+    if (!allLogs || allLogs.length === 0) {
+      alert("No logs loaded to export.");
+      return;
+    }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allLogs, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `timelog_backup_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+  
+  window.exportLogsAsCSV = function() {
+    if (!allLogs || allLogs.length === 0) {
+      alert("No logs loaded to export.");
+      return;
+    }
+    
+    const headers = ["ID", "Type", "Timestamp", "ISO_Date", "Formatted_Time"];
+    const rows = allLogs.map(log => {
+      const d = new Date(log.timestamp);
+      return [
+        `"${log.id || ''}"`,
+        `"${log.type || ''}"`,
+        `"${log.timestamp || ''}"`,
+        `"${isNaN(d.getTime()) ? '' : d.toLocaleDateString()}"`,
+        `"${isNaN(d.getTime()) ? '' : d.toLocaleTimeString()}"`
+      ].join(",");
+    });
+  
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", encodeURI(csvContent));
+    downloadAnchor.setAttribute("download", `timelog_backup_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+  // --- END BACKUP UTILITIES ---
+  
   function subscribeToLogs() {
     const logsQuery = query(getTimeLogCollectionRef(), orderBy('timestamp', 'desc'));
     onSnapshot(logsQuery, (snapshot) => {
