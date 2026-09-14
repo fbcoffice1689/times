@@ -236,6 +236,21 @@
     <button class="btn-sign-in" onclick="handleSignIn()">Sign in with Google</button>
   </div>
 
+  <!-- Data Backup Controls -->
+<div class="panel" style="background:#fff; border:1px solid #d8d3c7; border-radius:10px; padding:18px 20px; margin-bottom:18px;">
+  <h2 style="font-size:12px; text-transform:uppercase; letter-spacing:0.08em; color:#6b7280; margin:0 0 12px; font-weight:700;">
+    Emergency Data Backup
+  </h2>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <button class="btn-primary" onclick="exportLogsAsJSON()" style="background:#3a5a68; color:#fff; padding:9px 16px; font-size:13px; border-radius:6px; border:none; cursor:pointer;">
+      📥 Download JSON Backup
+    </button>
+    <button class="btn-primary" onclick="exportLogsAsCSV()" style="background:#26404b; color:#fff; padding:9px 16px; font-size:13px; border-radius:6px; border:none; cursor:pointer;">
+      📊 Download CSV Backup
+    </button>
+  </div>
+</div>
+  
   <div id="app-panels" style="display:none;">
 
     <div class="panel">
