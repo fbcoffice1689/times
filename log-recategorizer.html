@@ -55,6 +55,11 @@
     text-transform:uppercase;
   }
   #user-line{font-family:var(--mono);font-size:12px;color:#6b7280;}
+  .head-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+  .nav-link{font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 12px;background:#fff;white-space:nowrap;}
+  .nav-link:hover{background:#f0eee7;}
+  .cutoff-form{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);}
+  .cutoff-form .since-input{flex:1;min-width:160px;max-width:none;}
 
   .panel{
     background:#fff;
@@ -226,6 +231,7 @@
   .since-input{font-family:var(--sans);font-size:12px;padding:5px 7px;border:1px solid var(--line-strong);border-radius:5px;background:#fff;color:var(--ink);width:100%;max-width:220px;}
 
   @media (max-width:640px){
+    .head-right{align-items:flex-start;}
     .totals-grid{grid-template-columns:1fr;}
     .filters{flex-direction:column;align-items:stretch;}
     .field select{min-width:0;}
@@ -243,7 +249,10 @@
       <h1>Time Log Recategorizer</h1>
       <div class="tag">FBC Clinton · Time Clock Admin</div>
     </div>
-    <div id="user-line">Connecting…</div>
+    <div class="head-right">
+      <a class="nav-link" href="./">&larr; Time Clock</a>
+      <div id="user-line">Connecting…</div>
+    </div>
   </header>
 
   <div id="login-panel" class="panel">
@@ -276,6 +285,10 @@
           <div class="total-value" id="total-period-work">—</div>
           <div class="total-sub" id="total-period-break">&nbsp;</div>
           <div class="total-range" id="total-period-range">Since last report cutoff</div>
+          <div class="cutoff-form">
+            <input type="datetime-local" id="new-cutoff" class="since-input" aria-label="New report cutoff">
+            <button class="btn-mini" onclick="changeCutoff()">Set cutoff</button>
+          </div>
           <div class="total-range" id="cutoff-missing" style="display:none;">This cutoff isn't in the log yet. <button class="link-btn" onclick="addCurrentCutoffToLog()">Add it</button></div>
         </div>
         <div class="total-card">
@@ -344,7 +357,7 @@
           </tbody>
         </table>
       </div>
-      <p class="footnote">Recategorizing changes the event's <strong>type</strong> (e.g. Break End → Clock In). Double-click a <strong>time</strong> value to edit it directly as text (format: YYYY-MM-DD HH:MM:SS), then press Enter or click away to stage the change — it turns bold until you hit Save. One Save button commits both the type and time change together. Changes take effect immediately and will reflow into your reports and dashboard.<br><strong>Period Cutoff</strong> rows record where each reporting period ended; they don't count as time. Editing the time of the row marked <em>Current cutoff</em> also moves the live report cutoff on the time clock. Use <em>Make current</em> on an older cutoff row to roll the current period back to it.</p>
+      <p class="footnote">Recategorizing changes the event's <strong>type</strong> (e.g. Break End → Clock In). Double-click a <strong>time</strong> value to edit it directly as text (format: YYYY-MM-DD HH:MM:SS), then press Enter or click away to stage the change — it turns bold until you hit Save. One Save button commits both the type and time change together. Changes take effect immediately and will reflow into your reports and dashboard.<br><strong>Period Cutoff</strong> rows record where each reporting period ended; they don't count as time. Editing the time of the row marked <em>Current cutoff</em> also moves the live report cutoff on the time clock. Use <em>Make current</em> on an older cutoff row to roll the current period back to it, or <em>Set cutoff</em> in the Current period card to pick any date and time.</p>
     </div>
 
   </div>
@@ -909,6 +922,36 @@
       buttonEl.disabled = false;
     }
   }
+
+  // Move the live report cutoff AND its log entry together.
+  // If the current cutoff has a log entry it is moved; otherwise a new entry is added.
+  window.changeCutoff = async function () {
+    const input = document.getElementById('new-cutoff');
+    if (!input.value) { showToast('Pick a date and time for the new cutoff.', 'error'); return; }
+    const newDate = new Date(input.value);
+    if (isNaN(newDate.getTime())) { showToast('That date could not be read.', 'error'); return; }
+    const newIso = newDate.toISOString();
+    if (!confirm(`Move the report cutoff to ${newDate.toLocaleString()}? The current period will be recalculated from this point.`)) return;
+
+    try {
+      const batch = writeBatch(db);
+      batch.set(getReportCutoffRef(), { lastReportTimestamp: newIso }, { merge: true });
+      const existing = allLogs.find((l) => isCurrentCutoff(l));
+      if (existing) {
+        batch.update(doc(db, `artifacts/${appId}/public/data/timeLogs`, existing.id),
+          { timestamp: newIso, note: 'Manual cutoff adjustment' });
+      } else {
+        batch.set(doc(getTimeLogCollectionRef()),
+          { type: CUTOFF, timestamp: newIso, note: 'Manual cutoff adjustment' });
+      }
+      await batch.commit();
+      input.value = '';
+      showToast('Cutoff moved — current period recalculated.', 'success');
+    } catch (e) {
+      console.error('Failed to change cutoff:', e);
+      showToast('Could not change cutoff: ' + e.message, 'error');
+    }
+  };
 
   window.addCurrentCutoffToLog = async function () {
     if (!reportCutoffIso) return;
