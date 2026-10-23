@@ -138,6 +138,12 @@
   .badge.CLOCK_OUT{background:var(--work-bg);color:var(--work);}
   .badge.BREAK_START{background:var(--break-bg);color:var(--break);}
   .badge.BREAK_END{background:var(--break-bg);color:var(--break);}
+  .badge.PERIOD_CUTOFF{background:#e3ecf2;color:var(--accent-dark);}
+  tbody tr.cutoff-row td{background:#f3f7f9;}
+  .cutoff-current{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-dark);white-space:nowrap;}
+  .btn-mini{font-family:var(--mono);font-size:11px;padding:5px 9px;background:#fff;color:var(--accent);border:1px solid var(--line-strong);border-radius:5px;white-space:nowrap;}
+  .btn-mini:hover:not(:disabled){background:#f0eee7;}
+  .link-btn{background:none;border:none;padding:0;color:var(--accent);font-size:12px;font-weight:600;text-decoration:underline;cursor:pointer;}
 
   .type-select{
     font-family:var(--mono);
@@ -270,6 +276,7 @@
           <div class="total-value" id="total-period-work">—</div>
           <div class="total-sub" id="total-period-break">&nbsp;</div>
           <div class="total-range" id="total-period-range">Since last report cutoff</div>
+          <div class="total-range" id="cutoff-missing" style="display:none;">This cutoff isn't in the log yet. <button class="link-btn" onclick="addCurrentCutoffToLog()">Add it</button></div>
         </div>
         <div class="total-card">
           <div class="total-label">Since a date I choose</div>
@@ -308,6 +315,7 @@
             <option value="CLOCK_OUT">Clock Out</option>
             <option value="BREAK_START">Break Start</option>
             <option value="BREAK_END">Break End</option>
+            <option value="PERIOD_CUTOFF">Period Cutoff</option>
           </select>
         </div>
         <div class="field">
@@ -336,7 +344,7 @@
           </tbody>
         </table>
       </div>
-      <p class="footnote">Recategorizing changes the event's <strong>type</strong> (e.g. Break End → Clock In). Double-click a <strong>time</strong> value to edit it directly as text (format: YYYY-MM-DD HH:MM:SS), then press Enter or click away to stage the change — it turns bold until you hit Save. One Save button commits both the type and time change together. Changes take effect immediately and will reflow into your reports and dashboard.</p>
+      <p class="footnote">Recategorizing changes the event's <strong>type</strong> (e.g. Break End → Clock In). Double-click a <strong>time</strong> value to edit it directly as text (format: YYYY-MM-DD HH:MM:SS), then press Enter or click away to stage the change — it turns bold until you hit Save. One Save button commits both the type and time change together. Changes take effect immediately and will reflow into your reports and dashboard.<br><strong>Period Cutoff</strong> rows record where each reporting period ended; they don't count as time. Editing the time of the row marked <em>Current cutoff</em> also moves the live report cutoff on the time clock. Use <em>Make current</em> on an older cutoff row to roll the current period back to it.</p>
     </div>
 
   </div>
@@ -368,7 +376,7 @@
     setPersistence, browserLocalPersistence
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
   import {
-    getFirestore, doc, getDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, writeBatch
+    getFirestore, doc, getDoc, addDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, writeBatch
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
   const appId = __app_id;
@@ -387,8 +395,19 @@
     CLOCK_IN: 'Clock In',
     CLOCK_OUT: 'Clock Out',
     BREAK_START: 'Break Start',
-    BREAK_END: 'Break End'
+    BREAK_END: 'Break End',
+    PERIOD_CUTOFF: 'Period Cutoff'
   };
+  const CUTOFF = 'PERIOD_CUTOFF';
+
+  function getReportCutoffRef() {
+    return doc(db, `artifacts/${appId}/public/data/state/report_cutoff`);
+  }
+
+  function isCurrentCutoff(log) {
+    if (log.type !== CUTOFF || !reportCutoffIso) return false;
+    return new Date(log.timestamp).getTime() === new Date(reportCutoffIso).getTime();
+  }
 
   function getTimeLogCollectionRef() {
     return collection(db, `artifacts/${appId}/public/data/timeLogs`);
@@ -484,7 +503,7 @@
       return;
     }
     
-    const headers = ["ID", "Type", "Timestamp", "ISO_Date", "Formatted_Time"];
+    const headers = ["ID", "Type", "Timestamp", "ISO_Date", "Formatted_Time", "Note"];
     const rows = allLogs.map(log => {
       const d = new Date(log.timestamp);
       return [
@@ -492,7 +511,8 @@
         `"${log.type || ''}"`,
         `"${log.timestamp || ''}"`,
         `"${isNaN(d.getTime()) ? '' : d.toLocaleDateString()}"`,
-        `"${isNaN(d.getTime()) ? '' : d.toLocaleTimeString()}"`
+        `"${isNaN(d.getTime()) ? '' : d.toLocaleTimeString()}"`,
+        `"${String(log.note || '').replace(/"/g, '""')}"`
       ].join(",");
     });
   
@@ -581,6 +601,8 @@
     document.getElementById('total-period-range').textContent = isNaN(cutoffMs)
       ? 'No report cutoff yet (all time)'
       : `Since ${new Date(cutoffMs).toLocaleString('en-US', dateFmt)}`;
+    const hasEntry = isNaN(cutoffMs) || allLogs.some((l) => l.type === CUTOFF && new Date(l.timestamp).getTime() === cutoffMs);
+    document.getElementById('cutoff-missing').style.display = hasEntry ? 'none' : 'block';
 
     // Custom point
     const customVal = document.getElementById('custom-since').value;
@@ -600,10 +622,10 @@
   }
 
   function subscribeToReportCutoff() {
-    const ref = doc(db, `artifacts/${appId}/public/data/state/report_cutoff`);
-    onSnapshot(ref, (snap) => {
+    onSnapshot(getReportCutoffRef(), (snap) => {
       reportCutoffIso = snap.exists() ? (snap.data().lastReportTimestamp || null) : null;
       renderTotals();
+      if (allLogs.length) renderTable();
     }, (error) => console.error('Report cutoff subscription error:', error));
   }
 
@@ -693,6 +715,9 @@
       const tr = document.createElement('tr');
       tr.dataset.id = log.id;
       if (selectedIds.has(log.id)) tr.classList.add('selected');
+      const isCutoff = log.type === CUTOFF;
+      const isCurrent = isCurrentCutoff(log);
+      if (isCutoff) tr.classList.add('cutoff-row');
 
       const d = new Date(log.timestamp);
       const dateText = isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -706,18 +731,24 @@
       const pendingType = dirtyEdits[log.id] || currentType;
       const isDirty = pendingType !== currentType || timeIsDirty;
 
-      const optionsHtml = TYPES.map((t) =>
-        `<option value="${t}" ${t === pendingType ? 'selected' : ''}>${TYPE_LABELS[t]}</option>`
-      ).join('');
+      const optionsHtml = isCutoff
+        ? `<option value="${CUTOFF}" selected>${TYPE_LABELS[CUTOFF]}</option>`
+        : TYPES.map((t) =>
+            `<option value="${t}" ${t === pendingType ? 'selected' : ''}>${TYPE_LABELS[t]}</option>`
+          ).join('');
+      const recatCell = isCutoff
+        ? (isCurrent
+            ? `<span class="cutoff-current">● Current cutoff</span>`
+            : `<button class="btn-mini make-current">Make current</button>`)
+        : `<select class="type-select">${optionsHtml}</select>`;
+      const noteAttr = log.note ? ` title="${String(log.note).replace(/"/g, '&quot;')}"` : '';
 
       tr.innerHTML = `
         <td><input type="checkbox" class="row-check" ${selectedIds.has(log.id) ? 'checked' : ''}></td>
         <td>${dateText}</td>
         <td style="font-family:var(--mono);"><span class="time-display ${timeIsDirty ? 'time-pending' : ''}" title="Double-click to edit">${timeText}</span></td>
-        <td><span class="badge ${currentType}">${TYPE_LABELS[currentType] || currentType}</span></td>
-        <td>
-          <select class="type-select">${optionsHtml}</select>
-        </td>
+        <td><span class="badge ${currentType}"${noteAttr}>${TYPE_LABELS[currentType] || currentType}</span></td>
+        <td>${recatCell}</td>
         <td><button class="row-save ${isDirty ? 'dirty' : ''}" ${isDirty ? '' : 'disabled'}>Save</button></td>
         <td><button class="row-delete btn-danger" style="padding:5px 10px;font-size:11px;">Delete</button></td>
       `;
@@ -734,18 +765,25 @@
       const saveBtn = tr.querySelector('.row-save');
 
       function refreshSaveState() {
-        const typeChanged = select.value !== currentType;
+        const typeChanged = select ? select.value !== currentType : false;
         const timeChanged = !!dirtyTimestamps[log.id];
         const dirty = typeChanged || timeChanged;
         saveBtn.classList.toggle('dirty', dirty);
         saveBtn.disabled = !dirty;
       }
 
-      select.addEventListener('change', () => {
-        if (select.value === currentType) delete dirtyEdits[log.id];
-        else dirtyEdits[log.id] = select.value;
-        refreshSaveState();
-      });
+      if (select) {
+        select.addEventListener('change', () => {
+          if (select.value === currentType) delete dirtyEdits[log.id];
+          else dirtyEdits[log.id] = select.value;
+          refreshSaveState();
+        });
+      }
+
+      const makeCurrentBtn = tr.querySelector('.make-current');
+      if (makeCurrentBtn) {
+        makeCurrentBtn.addEventListener('click', () => makeCutoffCurrent(log, makeCurrentBtn));
+      }
 
       const timeSpan = tr.querySelector('.time-display');
       timeSpan.addEventListener('dblclick', () => {
@@ -781,7 +819,7 @@
         input.addEventListener('blur', commitEdit);
       });
 
-      saveBtn.addEventListener('click', () => saveSingleEdit(log.id, select.value, saveBtn));
+      saveBtn.addEventListener('click', () => saveSingleEdit(log.id, select ? select.value : currentType, saveBtn, isCurrent));
 
       const deleteBtn = tr.querySelector('.row-delete');
       deleteBtn.addEventListener('click', () => deleteSingleEntry(log.id, currentType, log.timestamp, deleteBtn));
@@ -792,7 +830,7 @@
     updateBulkBar();
   }
 
-  async function saveSingleEdit(logId, newType, buttonEl) {
+  async function saveSingleEdit(logId, newType, buttonEl, isCurrentCutoffRow = false) {
     buttonEl.disabled = true;
     buttonEl.textContent = 'Saving…';
     const updates = {};
@@ -807,10 +845,21 @@
 
     try {
       const logRef = doc(db, `artifacts/${appId}/public/data/timeLogs`, logId);
-      await updateDoc(logRef, updates);
+      if (isCurrentCutoffRow && updates.timestamp) {
+        // Keep the live report cutoff in step with its log entry
+        const batch = writeBatch(db);
+        batch.update(logRef, updates);
+        batch.set(getReportCutoffRef(), { lastReportTimestamp: updates.timestamp }, { merge: true });
+        await batch.commit();
+      } else {
+        await updateDoc(logRef, updates);
+      }
       delete dirtyEdits[logId];
       delete dirtyTimestamps[logId];
-      showToast('Event updated.', 'success');
+      renderTable();
+      showToast(isCurrentCutoffRow && updates.timestamp
+        ? 'Cutoff moved — current period recalculated.'
+        : 'Event updated.', 'success');
     } catch (e) {
       console.error('Failed to save edit:', e);
       showToast('Save failed: ' + e.message, 'error');
@@ -825,7 +874,10 @@
       ? `this ${TYPE_LABELS[type] || type} event`
       : `the ${TYPE_LABELS[type] || type} event from ${d.toLocaleString()}`;
 
-    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    const currentNote = (type === CUTOFF && reportCutoffIso && new Date(timestamp).getTime() === new Date(reportCutoffIso).getTime())
+      ? '\n\nThis is the CURRENT cutoff. Deleting the log entry does not move the cutoff itself.'
+      : '';
+    if (!confirm(`Delete ${label}? This cannot be undone.${currentNote}`)) return;
 
     buttonEl.disabled = true;
     buttonEl.textContent = 'Deleting…';
@@ -843,6 +895,35 @@
       buttonEl.textContent = 'Delete';
     }
   }
+
+  async function makeCutoffCurrent(log, buttonEl) {
+    const when = new Date(log.timestamp).toLocaleString();
+    if (!confirm(`Make ${when} the current report cutoff? The current period will be recalculated from this point.`)) return;
+    buttonEl.disabled = true;
+    try {
+      await updateDoc(getReportCutoffRef(), { lastReportTimestamp: log.timestamp });
+      showToast('Current cutoff updated.', 'success');
+    } catch (e) {
+      console.error('Failed to set current cutoff:', e);
+      showToast('Could not update cutoff: ' + e.message, 'error');
+      buttonEl.disabled = false;
+    }
+  }
+
+  window.addCurrentCutoffToLog = async function () {
+    if (!reportCutoffIso) return;
+    try {
+      await addDoc(getTimeLogCollectionRef(), {
+        type: CUTOFF,
+        timestamp: new Date(reportCutoffIso).toISOString(),
+        note: 'Added from recategorizer'
+      });
+      showToast('Current cutoff added to the log.', 'success');
+    } catch (e) {
+      console.error('Failed to add cutoff entry:', e);
+      showToast('Could not add cutoff: ' + e.message, 'error');
+    }
+  };
 
   window.toggleSelectAll = function (checkboxEl) {
     const rows = document.querySelectorAll('#log-table-body tr[data-id]');
@@ -881,8 +962,12 @@
 
   window.applyBulkRecategorize = async function () {
     const newType = document.getElementById('bulk-type').value;
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
+    const cutoffIds = new Set(allLogs.filter((l) => l.type === CUTOFF).map((l) => l.id));
+    const ids = Array.from(selectedIds).filter((id) => !cutoffIds.has(id));
+    if (ids.length === 0) {
+      if (selectedIds.size) showToast('Period Cutoff rows can\'t be recategorized.', 'error');
+      return;
+    }
 
     if (!confirm(`Recategorize ${ids.length} event(s) as "${TYPE_LABELS[newType]}"? This cannot be undone automatically.`)) {
       return;
