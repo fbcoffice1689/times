@@ -2,316 +2,253 @@
 <html lang="en">
    <head>
       <meta charset="UTF-8">
-      <title>🧭 Hybrid Time & Task Dashboard</title>
+      <title>Time Clock — FBC Clinton</title>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
      <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/4/4a/Clock_icon_simple.svg">
       <script src="https://cdn.tailwindcss.com"></script>
       <style>
-         body {
-         font-family: 'Inter', sans-serif;
-         background-color: #f0f4f8; /* Light background */
+         :root{
+           --ink:#1f2933; --paper:#f7f5f0; --line:#d8d3c7; --line-strong:#b9b2a1;
+           --muted:#6b7280; --accent:#3a5a68; --accent-dark:#26404b;
+           --work:#3f7d5c; --work-bg:#e7f1ea; --break:#a1592e; --break-bg:#f6e8dd;
+           --danger:#b3392f; --danger-bg:#f7e4e1;
+           --mono:'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+           --sans:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
          }
-         .card {
-         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-         transition: transform 0.2s;
+         *{box-sizing:border-box;}
+         body{margin:0;font-family:var(--sans);background:var(--paper);color:var(--ink);-webkit-font-smoothing:antialiased;}
+         #app-container{max-width:960px;margin:0 auto;padding:28px 20px 80px;}
+
+         /* Header */
+         .tool-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:20px;}
+         .tool-head h1{font-size:22px;font-weight:700;letter-spacing:0.01em;margin:0;}
+         .tool-head .tag{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.03em;text-transform:uppercase;margin-top:2px;}
+         .head-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+         #user-id-display{font-family:var(--mono);font-size:12px;color:var(--muted);}
+         .nav-link{font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line-strong);border-radius:6px;padding:6px 12px;background:#fff;white-space:nowrap;}
+         .nav-link:hover{background:#f0eee7;}
+
+         /* Panels */
+         .panel{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:18px;}
+         .panel-title{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:0 0 14px;font-weight:700;}
+         .top-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+         .top-grid .panel{margin-bottom:0;}
+
+         /* Clock panel */
+         .status-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:500;padding:6px 0;}
+         .status-pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.03em;background:#eee;color:var(--muted);}
+         .pill-in{background:var(--work-bg);color:var(--work);}
+         .pill-out{background:var(--danger-bg);color:var(--danger);}
+         .pill-break{background:var(--break-bg);color:var(--break);}
+         .pill-working{background:#e3ecf2;color:var(--accent-dark);}
+         .action-stack{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+         .btn-big{width:100%;padding:14px 16px;border:none;border-radius:8px;font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer;transition:background .12s ease, opacity .12s ease;color:#fff;background:var(--accent);}
+         .btn-big:disabled{opacity:0.45;cursor:not-allowed;}
+         .btn-clockin{background:var(--work);} .btn-clockin:hover:not(:disabled){background:#336a4d;}
+         .btn-clockout{background:var(--danger);} .btn-clockout:hover:not(:disabled){background:#8e2e26;}
+         .btn-break{background:var(--break-bg);color:var(--break);border:1px solid #e3c7b2;} .btn-break:hover:not(:disabled){background:#f1dccb;}
+
+         /* Period panel */
+         .period-panel{background:var(--accent-dark);border-color:var(--accent-dark);color:#fff;}
+         .period-panel .panel-title{color:#b8cbd4;}
+         .big-time{font-family:var(--mono);font-size:34px;font-weight:700;letter-spacing:0.01em;font-variant-numeric:tabular-nums;line-height:1.1;}
+         .period-sub{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;color:#d6e2e7;margin-top:8px;}
+         .period-since{font-size:12px;color:#b8cbd4;margin:10px 0 14px;}
+         .period-since a{color:#fff;}
+         .btn-report{width:100%;padding:10px 14px;border-radius:7px;border:1px solid #6b8c99;background:transparent;color:#fff;font-weight:600;font-size:13px;cursor:pointer;}
+         .btn-report:hover:not(:disabled){background:rgba(255,255,255,0.08);}
+         .btn-report:disabled{opacity:0.45;cursor:not-allowed;}
+
+         /* Forms & buttons */
+         .field-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;display:block;}
+         .input{font-family:var(--sans);font-size:14px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:6px;background:#fff;color:var(--ink);width:100%;}
+         .input:focus{outline:2px solid #9fb6c0;outline-offset:0;border-color:var(--accent);}
+         .btn-primary{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:9px 18px;font-weight:600;font-size:14px;cursor:pointer;}
+         .btn-primary:hover:not(:disabled){background:var(--accent-dark);}
+         .btn-primary:disabled{opacity:0.45;cursor:not-allowed;}
+         .btn-ghost{background:#fff;color:var(--accent);border:1px solid var(--line-strong);border-radius:6px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer;}
+         .btn-ghost:hover:not(:disabled){background:#f0eee7;}
+         .btn-ghost:disabled{opacity:0.45;cursor:not-allowed;}
+         .btn-print{background:var(--work);color:#fff;border:none;border-radius:6px;padding:0 16px;height:40px;font-weight:600;font-size:13px;cursor:pointer;}
+         .btn-print:hover:not(:disabled){background:#336a4d;}
+         .btn-print:disabled{opacity:0.45;cursor:not-allowed;}
+         .add-task-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}
+
+         /* Tasks */
+         .task-item{border-left-width:4px;transition:background-color .15s ease;}
+         #unfinished-tasks-list .task-item{border:1px solid var(--line);border-left-width:4px;box-shadow:none !important;}
+
+         /* Log report */
+         .log-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
+         .log-toolbar .spacer{flex:1;}
+         .prior-picker{display:flex;flex-direction:column;justify-content:center;border:1px solid var(--line-strong);border-radius:6px;padding:0 10px;height:40px;background:#fff;}
+         .prior-picker label{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;line-height:1;margin-bottom:2px;}
+         .prior-picker input{border:0;padding:0;font-size:12px;font-weight:600;color:var(--ink);background:transparent;outline:none;}
+         .icon-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#fff;color:var(--accent);border:1px solid var(--line-strong);border-radius:6px;cursor:pointer;}
+         .icon-btn:hover{background:#f0eee7;}
+         #log-history-list{max-height:28rem;overflow-y:auto;border:1px solid var(--line);border-radius:8px;background:#fcfbf8;padding:4px;}
+         #log-history-list table{width:100%;border-collapse:collapse;font-size:13px;}
+         #log-history-list thead{background:transparent !important;}
+         #log-history-list thead th{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);border-bottom:2px solid var(--ink);padding:8px 10px;white-space:nowrap;}
+         #log-history-list tbody td{border-bottom:1px solid var(--line);padding:8px 10px;}
+         #log-history-list tbody tr:hover{background:#f4f2ec;}
+         .footnote{font-size:11px;color:#9ca3af;margin-top:10px;text-align:center;}
+
+         /* Login, modals */
+         .login-panel{text-align:center;padding:36px 20px;}
+         .login-panel p{color:#4b5563;margin:0 0 18px;}
+
+         /* Loading shimmer */
+         .loading-shimmer{background:#e0e0e0;background-image:linear-gradient(to right,#e0e0e0 0%,#f5f5f5 20%,#e0e0e0 40%,#e0e0e0 100%);background-repeat:no-repeat;background-size:800px 104px;animation:shimmer 1.5s linear infinite forwards;}
+         @keyframes shimmer{0%{background-position:-468px 0;}100%{background-position:468px 0;}}
+         .loading-text{color:transparent !important;}
+
+         @media (max-width:720px){
+           .top-grid{grid-template-columns:1fr;}
          }
-         .task-item {
-         padding: 12px;
-         border-left-width: 4px; 
-         transition: background-color 0.15s ease;
+         @media (max-width:640px){
+           #app-container{padding:18px 14px 60px;max-width:100% !important;}
+           .head-right{align-items:flex-start;}
+           .add-task-grid{grid-template-columns:1fr;}
+           .task-item{padding:10px;flex-direction:column;align-items:flex-start !important;}
+           .task-item > div:last-child{margin-top:8px;width:100%;justify-content:flex-end;}
+           .log-toolbar .spacer{display:none;}
+           button{min-height:44px;}
          }
-         .status-pill {
-         display: inline-flex;
-         align-items: center;
-         padding: 4px 10px;
-         border-radius: 9999px;
-         font-size: 0.875rem;
-         font-weight: 600;
-         }
-         /* Custom styles for loading state */
-         .loading-shimmer {
-         background: #e0e0e0;
-         background-image: linear-gradient(to right, #e0e0e0 0%, #f5f5f5 20%, #e0e0e0 40%, #e0e0e0 100%);
-         background-repeat: no-repeat;
-         background-size: 800px 104px; 
-         animation-duration: 1.5s;
-         animation-fill-mode: forwards; 
-         animation-iteration-count: infinite;
-         animation-name: shimmer;
-         animation-timing-function: linear;
-         }
-         @keyframes shimmer {
-         0% { background-position: -468px 0; }
-         100% { background-position: 468px 0; }
-         }
-         .loading-text { color: transparent; }
-         /* Mobile optimizations */
-         @media (max-width: 640px) {
-         /* ❗ FIX: Force max-width of container to 100% on small screens */
-         #app-container {
-         max-width: 100% !important;
-         }
-         .status-pill {
-         font-size: 0.75rem;
-         padding: 3px 8px;
-         }
-         .task-item {
-         padding: 10px;
-         /* Ensure vertical stacking and alignment on small screens */
-         flex-direction: column;
-         align-items: flex-start !important;
-         }
-         .task-item > div:last-child {
-         margin-top: 8px;
-         width: 100%; /* Forces button container to full width */
-         justify-content: flex-end;
-         }
-         button {
-         min-height: 44px; /* Touch-friendly size */
-         }
-         }
-         /* FIX FOR PRINTING: 
-         * Ensure only the report is visible and formatted for print.
-         */
+
+         /* PRINTING: only the report is visible */
          @media print {
-         .no-print {
-         display: none !important;
-         .print-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 15px;
-          }
-          .print-table th, .print-table td {
-              border: 1px solid #ccc;
-              padding: 8px;
-              text-align: left;
-          }
-          .print-table th {
-              background-color: #f3f4f6;
-          }
-         }
-         #log-history-list {
-         max-height: none !important; /* Allows the content to expand fully */
-         overflow: visible !important; /* Disables the scrollbar */
-         border: none !important;      /* Removes the border from the printout */
-         padding: 0 !important;        /* Removes the padding from the printout */
-         }
-         #log-report-container {
-         position: absolute;
-         left: 0;
-         top: 0;
-         width: 100%;
-         margin: 0;
-         padding: 20px;
-         box-shadow: none; 
-         page-break-after: always; 
-         }
-         .print-header {
-         display: block !important; /* <--- This overrides the 'hidden' class during print */
-         text-align: center;
-         margin-bottom: 20px;
-         padding-bottom: 10px;
-         border-bottom: 2px solid #374151; /* Dark line under header */
-         }
-         .print-table {
-         width: 100%;
-         border-collapse: collapse;
-         margin-top: 15px;
-         }
-         .print-table th, .print-table td {
-         border: 1px solid #ccc;
-         padding: 8px;
-         text-align: left;
-         }
-         .print-table th {
-         background-color: #f3f4f6;
-         }
-         /* Ensure the main app container is not hidden */
-         #app-container {
-         width: 100% !important;
-         max-width: none !important;
-         }
+           body{background:#fff;}
+           .no-print{display:none !important;}
+           #log-history-list{max-height:none !important;overflow:visible !important;border:none !important;padding:0 !important;background:#fff !important;}
+           #log-report-container{position:absolute;left:0;top:0;width:100%;margin:0;padding:20px;border:none;box-shadow:none;page-break-after:always;}
+           .print-header{display:block !important;text-align:center;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid #374151;}
+           .print-table{width:100%;border-collapse:collapse;margin-top:15px;}
+           .print-table th, .print-table td{border:1px solid #ccc !important;padding:8px;text-align:left;}
+           .print-table th{background-color:#f3f4f6;}
+           #app-container{width:100% !important;max-width:none !important;}
          }
       </style>
    </head>
-   <body class="py-4 px-0 sm:p-8 min-h-screen flex items-start justify-center">
-      <div id="app-container" class="w-full max-w-4xl lg:max-6xl">
-         <header class="text-center mb-6 no-print">
-            <h1 class="text-3xl font-extrabold text-gray-900 mb-2">Hybrid Time & Task Dashboard</h1>
-            <p class="text-xs text-gray-500 mb-4 break-words">Session User ID: <span id="user-id-display" class="font-mono text-xs loading-text loading-shimmer rounded">Initializing user...</span></p>
+   <body>
+      <div id="app-container">
+         <header class="tool-head no-print">
+            <div>
+               <h1>Time Clock</h1>
+               <div class="tag">FBC Clinton · Time &amp; Tasks</div>
+            </div>
+            <div class="head-right">
+               <a class="nav-link" href="log-recategorizer.html">Log Recategorizer &rarr;</a>
+               <span id="user-id-display" class="loading-text loading-shimmer rounded">Initializing user...</span>
+            </div>
          </header>
-         <div id="login-container" class="bg-red-100 card rounded-xl p-6 mb-8 hidden">
-            <h2 class="text-xl font-bold text-red-700 mb-4">Access Required</h2>
-            <p class="mb-4 text-red-600">Please sign in with your authorized Google account to use this application.</p>
-            <button id="google-sign-in-btn" onclick="handleGoogleSignIn()" class="w-full py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition duration-200">
-            Sign In with Google
-            </button>
+
+         <div id="login-container" class="panel login-panel hidden no-print">
+            <p>Sign in with your authorized Google account to use the time clock.</p>
+            <button id="google-sign-in-btn" onclick="handleGoogleSignIn()" class="btn-primary" style="padding:12px 24px;">Sign in with Google</button>
          </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
-            <h2 class="text-xl font-bold mb-4 text-gray-700">Current Status (Synced)</h2>
-            <div id="status-display" class="space-y-3">
-               <p class="flex justify-between items-center text-sm font-medium">
-                  Clock Status:
-                  <span id="clock-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
-               </p>
-               <p class="flex justify-between items-center text-sm font-medium">
-                  Break Status:
-                  <span id="break-status-pill" class="status-pill bg-gray-200 text-gray-700 loading-text loading-shimmer">Loading...</span>
-               </p>
-            </div>
-         </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 flex flex-col space-y-4 no-print">
-            <h2 class="text-xl font-bold mb-2 text-gray-700">Quick Actions</h2>
-            <button id="clock-toggle-btn" 
-               onclick="handleClockToggle()" 
-               class="w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50" disabled>
-            Initializing...
-            </button>
-            <button id="break-toggle-btn" 
-               onclick="handleBreakToggle()" 
-               class="w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50" disabled>
-            Initializing...
-            </button>
-         </div>
-         <div class="bg-indigo-700 card rounded-xl p-6 mb-8 text-white no-print">
-            <h2 class="text-xl font-bold mb-2">Unreported Time Summary (Synced)</h2>
-            <p id="report-since" class="text-sm opacity-75 mb-4">Last reported: <span id="last-reported-date" class="font-semibold loading-text loading-shimmer rounded">Loading date...</span></p>
-            <div class="flex flex-col space-y-2 mb-4">
-               <div class="flex justify-between items-center text-lg font-bold">
-                  <span>Work Time:</span>
-                  <span id="total-work-time" class="font-mono text-xl loading-text loading-shimmer rounded">00:00:00</span>
+
+         <div class="top-grid no-print">
+            <div class="panel">
+               <h2 class="panel-title">Clock</h2>
+               <div id="status-display">
+                  <div class="status-row">Clock status
+                     <span id="clock-status-pill" class="status-pill loading-text loading-shimmer">Loading...</span>
+                  </div>
+                  <div class="status-row">Break status
+                     <span id="break-status-pill" class="status-pill loading-text loading-shimmer">Loading...</span>
+                  </div>
                </div>
-               <div class="flex justify-between items-center text-sm">
-                  <span>Break Time:</span>
-                  <span id="total-break-time" class="font-mono loading-text loading-shimmer rounded">00:00:00</span>
+               <div class="action-stack">
+                  <button id="clock-toggle-btn" onclick="handleClockToggle()" class="btn-big" disabled>Initializing...</button>
+                  <button id="break-toggle-btn" onclick="handleBreakToggle()" class="btn-big btn-break" disabled>Initializing...</button>
                </div>
             </div>
-            <button id="mark-reported-btn" onclick="handleMarkReported()" class="w-full bg-indigo-300 hover:bg-indigo-300 text-white font-semibold py-2 rounded-lg transition duration-150 disabled:opacity-50 no-print" disabled>
-            Mark All as Reported
-            </button>
+
+            <div class="panel period-panel">
+               <h2 class="panel-title">Current Period</h2>
+               <div class="field-label" style="color:#b8cbd4;">Work time</div>
+               <div id="total-work-time" class="big-time loading-text loading-shimmer rounded">00:00:00</div>
+               <div class="period-sub"><span>Break time</span><span id="total-break-time" class="loading-text loading-shimmer rounded">00:00:00</span></div>
+               <p id="report-since" class="period-since">Since <span id="last-reported-date" class="loading-text loading-shimmer rounded">Loading date...</span> · <a href="log-recategorizer.html">change cutoff</a></p>
+               <button id="mark-reported-btn" onclick="handleMarkReported()" class="btn-report" disabled>Mark All as Reported</button>
+            </div>
          </div>
-         <div class="bg-white card rounded-xl p-6 mb-8 no-print">
-            <h2 class="text-xl font-bold mb-4 text-gray-700">Priority Tasks (Synced)</h2>
-            <p class="text-xs text-gray-500 mb-4">This task list is synchronized across all your devices.</p>
+
+         <div class="panel no-print">
+            <h2 class="panel-title">Priority Tasks</h2>
             <div id="unfinished-tasks-list" class="space-y-2 mb-4">
                <p class="text-center py-6 text-gray-500" id="task-loading">Awaiting database connection...</p>
             </div>
-            <div class="border-t pt-4 mt-4">
-    <h3 class="text-lg font-semibold text-gray-700 mb-3">Add New Task</h3>
-    <div class="flex flex-col space-y-3">
-        <div class="flex space-x-2">
-            <input type="text" id="new-task-text" placeholder="Task Description..." class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none">
-            <button id="add-task-btn" onclick="handleAddTask()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold transition">Add</button>
-        </div>
-        
-        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 items-end">
-            <div class="w-full sm:w-1/2">
-                <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Repeat Frequency</label>
-<select id="task-frequency" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50">
-    <option value="none">One-time Task</option>
-    <option value="daily">Daily</option>
-    <option value="weekly">Weekly</option>
-    <option value="bi-weekly">Bi-Weekly</option>
-    <option value="monthly">Monthly</option>
-</select>
+            <div style="border-top:1px solid var(--line);padding-top:16px;margin-top:8px;">
+               <label class="field-label" for="new-task-text">Add a task</label>
+               <div style="display:flex;gap:8px;">
+                  <input type="text" id="new-task-text" placeholder="Task description…" class="input" style="flex:1;">
+                  <button id="add-task-btn" onclick="handleAddTask()" class="btn-primary">Add</button>
+               </div>
+               <div class="add-task-grid">
+                  <div>
+                     <label class="field-label" for="task-frequency">Repeat</label>
+                     <select id="task-frequency" class="input">
+                        <option value="none">One-time Task</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="bi-weekly">Bi-Weekly</option>
+                        <option value="monthly">Monthly</option>
+                     </select>
+                  </div>
+                  <div>
+                     <label class="field-label" for="new-due-date">Due date (optional)</label>
+                     <input type="date" id="new-due-date" class="input">
+                  </div>
+               </div>
             </div>
-            <div class="w-full sm:w-1/2">
-                <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Due Date (Optional)</label>
-                <input type="date" id="new-due-date" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50">
-            </div>
-        </div>
-    </div>
-</div>
          </div>
-<div class="bg-gray-800 card rounded-xl p-4 mb-8 text-white no-print">
-    <h3 class="text-sm font-bold mb-2 flex items-center">
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
-        Adjust Report Cutoff
-    </h3>
-    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-        <input type="datetime-local" id="manual-cutoff-input" class="bg-gray-700 text-sm border-none rounded-lg p-2 flex-grow focus:ring-2 focus:ring-indigo-400">
-        <button onclick="handleManualCutoffUpdate()" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg text-xs font-bold transition">
-            Update Cutoff
-        </button>
-    </div>
-    <p class="text-[10px] text-gray-400 mt-2 italic">Changing this will include/exclude logs based on the chosen time.</p>
-</div>         
-<div id="log-report-container" class="bg-white card rounded-xl p-6 mb-8">
-    
-    <div class="mb-2 no-print"> 
-        <h2 class="text-xl font-bold text-gray-700"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
-    </div>
 
-    <div class="flex space-x-2 mb-4 no-print">
-        
-<div class="no-print flex flex-col sm:flex-row sm:items-center gap-3 w-full mt-4">
-    
-    <div class="flex items-center gap-2 w-full sm:w-auto">
-        <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="flex-1 sm:flex-none bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold h-11 px-4 rounded-lg transition duration-150 whitespace-nowrap" title="Edit or Delete individual event logs">
-            Manage Log Events
-        </button>
-        
-        <button id="download-csv-btn" onclick="syncRawLogsToSheet()" 
-                class="bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold rounded-lg transition duration-150 flex items-center justify-center shrink-0" 
-                title="Download Full Log History as CSV" 
-                style="width: 44px; height: 44px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-        </button>
-    </div>
+         <div id="log-report-container" class="panel">
+            <h2 class="panel-title no-print"><span id="log-view-title">Time Log Segments (For Reporting)</span></h2>
+            <div class="log-toolbar no-print">
+               <button id="manage-logs-btn" onclick="handleLogViewToggle()" class="btn-ghost" style="height:40px;" title="Edit or delete individual event logs">Manage Log Events</button>
+               <button id="download-csv-btn" onclick="syncRawLogsToSheet()" class="icon-btn" title="Sync full log history to the sheet">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+               </button>
+               <span class="spacer"></span>
+               <div class="prior-picker">
+                  <label for="print-target-datepicker">Prior target</label>
+                  <input type="date" id="print-target-datepicker">
+               </div>
+               <button id="print-report-btn" onclick="handlePrintReport()" class="btn-print" disabled>Print Report</button>
+            </div>
+            <div id="log-history-list" class="space-y-2 text-sm">
+               <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
+            </div>
+            <p id="log-footer-text" class="footnote no-print">Calculated time spans since the last report cutoff.</p>
+         </div>
 
-    <div class="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
-        <div class="flex-1 sm:flex-none flex flex-col text-left justify-center bg-gray-50 border border-gray-300 rounded-lg px-3 h-11 min-w-[140px]">
-            <label for="print-target-datepicker" class="text-[9px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-0.5">Prior Target</label>
-            <input type="date" id="print-target-datepicker" class="bg-transparent text-xs font-semibold text-gray-700 outline-none cursor-pointer focus:text-indigo-600 leading-none p-0 border-0 m-0">
-        </div>
-
-        <button id="print-report-btn" onclick="handlePrintReport()" class="bg-green-500 hover:bg-green-600 text-white text-sm font-semibold h-11 px-4 rounded-lg transition duration-150 disabled:opacity-50 whitespace-nowrap" disabled>
-            Print Report
-        </button>
-    </div>
-
-</div>
-    </div>
-    
-    <div id="log-history-list" class="space-y-2 text-sm max-h-96 overflow-y-auto p-2 border rounded-lg bg-gray-50">
-        <p class="text-center py-4 text-gray-500" id="history-loading">Awaiting session data...</p>
-    </div>
-    <p id="log-footer-text" class="text-xs text-gray-500 mt-4 text-center no-print">Calculated time spans since the last report cutoff.</p>
-</div>
          <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
                <h3 id="message-title" class="text-xl font-bold mb-3 text-red-600">Alert</h3>
                <p id="message-content" class="text-gray-700 mb-4"></p>
-               <button onclick="hideMessage()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg">
-               OK
-               </button>
+               <button onclick="hideMessage()" class="btn-primary" style="width:100%;">OK</button>
             </div>
          </div>
          <div id="editLogModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-               <h3 class="text-2xl font-bold mb-4 text-gray-800">Edit Log Event</h3>
-               <p class="text-sm text-gray-600 mb-4">Adjust the timestamp for the selected event. This will automatically recalculate all reports.</p>
+               <h3 class="text-xl font-bold mb-2" style="color:var(--ink);">Edit Log Event</h3>
+               <p class="text-sm text-gray-600 mb-4">Adjust the timestamp for the selected event. Reports recalculate automatically.</p>
                <input type="hidden" id="editingLogId">
-               <p class="font-semibold mb-2">Event Type: <span id="editingLogType" class="text-indigo-600"></span></p>
-               <div class="mb-4">
-                  <label for="editDate" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" id="editDate" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+               <p class="font-semibold mb-3 text-sm">Event type: <span id="editingLogType" style="font-family:var(--mono);color:var(--accent);"></span></p>
+               <div class="mb-3">
+                  <label for="editDate" class="field-label">Date</label>
+                  <input type="date" id="editDate" class="input">
                </div>
-               <div class="mb-6">
-                  <label for="editTime" class="block text-sm font-medium text-gray-700 mb-1">Time (24-hour format, HH:MM)</label>
-                  <input type="time" id="editTime" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+               <div class="mb-5">
+                  <label for="editTime" class="field-label">Time (24-hour, HH:MM)</label>
+                  <input type="time" id="editTime" class="input">
                </div>
-               <div class="flex justify-end space-x-3">
-                  <button onclick="hideEditModal()" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition duration-150">
-                  Cancel
-                  </button>
-                  <button onclick="handleSaveEdit()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition duration-150">
-                  Save Changes
-                  </button>
+               <div class="flex justify-end gap-3">
+                  <button onclick="hideEditModal()" class="btn-ghost">Cancel</button>
+                  <button onclick="handleSaveEdit()" class="btn-primary">Save Changes</button>
                </div>
             </div>
          </div>
@@ -481,28 +418,28 @@ import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, d
              // Clock Status Pill
              if (currentState.isClockedIn) {
                  clockStatusPill.textContent = 'CLOCKED IN';
-                 clockStatusPill.className = 'status-pill bg-green-100 text-green-700';
+                 clockStatusPill.className = 'status-pill pill-in';
                  clockToggleBtn.textContent = 'Clock OUT';
-                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-red-600 hover:bg-red-700';
+                 clockToggleBtn.className = 'btn-big btn-clockout';
              } else {
                  clockStatusPill.textContent = 'CLOCKED OUT';
-                 clockStatusPill.className = 'status-pill bg-red-100 text-red-700';
+                 clockStatusPill.className = 'status-pill pill-out';
                  clockToggleBtn.textContent = 'Clock IN';
-                 clockToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-white transition duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 bg-green-600 hover:bg-green-700';
+                 clockToggleBtn.className = 'btn-big btn-clockin';
              }
          
              // Break Status Pill & Button
              if (currentState.isUserOnBreak) {
                  breakStatusPill.textContent = 'ON BREAK';
-                 breakStatusPill.className = 'status-pill bg-yellow-100 text-amber-700';
+                 breakStatusPill.className = 'status-pill pill-break';
                  breakToggleBtn.textContent = 'Break END';
-                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
+                 breakToggleBtn.className = 'btn-big btn-break';
                  breakToggleBtn.disabled = !currentState.isClockedIn;
              } else {
                  breakStatusPill.textContent = 'WORKING';
-                 breakStatusPill.className = 'status-pill bg-indigo-100 text-indigo-700';
+                 breakStatusPill.className = 'status-pill pill-working';
                  breakToggleBtn.textContent = 'Break START';
-                 breakToggleBtn.className = 'w-full py-3 rounded-xl font-bold text-gray-700 bg-yellow-400 hover:bg-yellow-500 transition duration-200 shadow-md disabled:opacity-50';
+                 breakToggleBtn.className = 'btn-big btn-break';
                  breakToggleBtn.disabled = !currentState.isClockedIn;
              }
          }
@@ -560,8 +497,8 @@ function renderTasks() {
 
         // --- Item Styling ---
         const itemClasses = completed
-            ? 'task-item bg-gray-200 rounded-lg flex items-start border-green-500 p-4 mb-3 shadow-sm'
-            : 'task-item bg-white hover:bg-indigo-50 rounded-lg flex items-start border-indigo-500 p-4 mb-3 shadow-md';
+            ? 'task-item bg-[#f4f2ec] rounded-lg flex items-start border-[#3f7d5c] p-4 mb-3'
+            : 'task-item bg-white hover:bg-[#faf9f6] rounded-lg flex items-start border-[#3a5a68] p-4 mb-3';
         item.className = itemClasses;
 
         if (isEditing) {
@@ -628,14 +565,14 @@ function renderTasks() {
             textContainer.className = 'flex-grow mr-2 sm:mr-4 min-w-0';
 
             const textSpan = document.createElement('span');
-            textSpan.className = `text-lg sm:text-lg font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
+            textSpan.className = `text-base font-medium break-words ${completed ? 'text-gray-600 line-through' : 'text-gray-800'}`;
             textSpan.textContent = task.text;
             textContainer.appendChild(textSpan);
 
             if (task.dueDate) {
                 const dueDateSpan = document.createElement('span');
                 const dateObj = new Date(task.dueDate + 'T00:00:00');
-                dueDateSpan.className = `text-base mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-orange-500'}`;
+                dueDateSpan.className = `text-sm mt-1 font-semibold block ${completed ? 'text-gray-400' : 'text-[#a1592e]'}`;
                 dueDateSpan.textContent = `Due: ${dateObj.toLocaleDateString()}`;
                 textContainer.appendChild(dueDateSpan);
             }
@@ -871,7 +808,7 @@ window.handleSaveTaskEdit = async function(taskId) {
              table.className = 'print-table text-left w-full text-sm';
              
              table.innerHTML = `
-                 <thead class="bg-red-100">
+                 <thead>
                      <tr>
                          <th class="p-2">Event Type</th>
                          <th class="p-2">Timestamp</th>
@@ -891,11 +828,11 @@ window.handleSaveTaskEdit = async function(taskId) {
                  const timeText = logTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
          
                  row.innerHTML = `
-                     <td class="p-2 font-semibold">${log.type}</td>
+                     <td class="p-2 font-semibold">${log.type}${(log.type === 'PERIOD_CUTOFF' && currentState.lastReportTimestamp && new Date(log.timestamp).getTime() === new Date(currentState.lastReportTimestamp).getTime()) ? ' <span class="text-xs text-[#3a5a68]">(current)</span>' : ''}</td>
                      <td class="p-2 text-gray-600">${dateText} at ${timeText}</td>
                      <td class="p-2 text-right space-x-2">
-                         <button onclick="handleEditEvent('${log.id}', '${log.type}', '${log.timestamp}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-2 py-1 rounded">Edit</button>
-                         <button onclick="handleDeleteEvent('${log.id}', '${log.type}')" class="text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded">Delete</button>
+                         <button onclick="handleEditEvent('${log.id}', '${log.type}', '${log.timestamp}')" class="text-xs bg-[#3a5a68] hover:bg-[#26404b] text-white px-2 py-1 rounded">Edit</button>
+                         <button onclick="handleDeleteEvent('${log.id}', '${log.type}')" class="text-xs bg-[#b3392f] hover:bg-[#8e2e26] text-white px-2 py-1 rounded">Delete</button>
                      </td>
                  `;
              });
@@ -947,7 +884,7 @@ window.handleSaveTaskEdit = async function(taskId) {
              table.className = 'print-table text-left w-full text-sm';
              
              table.innerHTML = `
-                 <thead class="bg-gray-200">
+                 <thead>
                      <tr>
                          <th class="p-2">Date</th>
                          <th class="p-2">Activity</th>
@@ -980,13 +917,13 @@ window.handleSaveTaskEdit = async function(taskId) {
          
                  if (segment.type === 'WORK') {
                      activityText = 'Work';
-                     colorClass = 'text-green-600';
+                     colorClass = 'text-[#3f7d5c]';
                      durationDisplay = `<span class="font-bold">${durationText}</span>`;
                  } else { // BREAK
                      activityText = 'Break';
-                     colorClass = 'text-red-600';
+                     colorClass = 'text-[#a1592e]';
                      // Display break time in parentheses
-                     durationDisplay = `<span class="font-bold text-red-600">(${durationText})</span>`; 
+                     durationDisplay = `<span class="font-bold text-[#a1592e]">(${durationText})</span>`; 
                  }
                  
                  // Check for negative duration (which can happen with inconsistent logs)
@@ -1072,11 +1009,22 @@ window.handleSaveTaskEdit = async function(taskId) {
          
              hideEditModal();
          
+             // If this is the log entry for the CURRENT report cutoff, the real cutoff moves with it
+             const editedLog = rawLogEvents.find(log => log.id === logId);
+             const isCurrentCutoff = !!(editedLog && editedLog.type === 'PERIOD_CUTOFF' &&
+                 currentState.lastReportTimestamp &&
+                 new Date(editedLog.timestamp).getTime() === new Date(currentState.lastReportTimestamp).getTime());
+
              try {
                  const logRef = doc(db, getTimeLogCollectionRef().path, logId);
                  await updateDoc(logRef, {
                      timestamp: newTimestampISO
                  });
+                 if (isCurrentCutoff) {
+                     await updateDoc(getReportStateRef(), { lastReportTimestamp: newTimestampISO });
+                     showMessage("Cutoff Updated", `The report cutoff and its log entry were moved to ${new Date(newTimestampISO).toLocaleString()}.`, false);
+                     return;
+                 }
                  showMessage("Log Updated", `Successfully updated log event ID: ${logId.substring(0, 8)}...`, false);
              } catch (e) {
                  console.error("Error updating log event:", e);
@@ -1084,31 +1032,6 @@ window.handleSaveTaskEdit = async function(taskId) {
              }
          }
          
-  window.handleManualCutoffUpdate = async function() {
-    const inputVal = document.getElementById('manual-cutoff-input').value;
-    
-    if (!inputVal) {
-        showMessage("Input Required", "Please select a date and time for the new cutoff.", true);
-        return;
-    }
-
-    const newCutoffISO = new Date(inputVal).toISOString();
-
-    if (!confirm(`Are you sure you want to move the report cutoff to ${new Date(newCutoffISO).toLocaleString()}? This will change which logs appear in your current report.`)) {
-        return;
-    }
-
-    try {
-        const reportStateRef = getReportStateRef();
-        await updateDoc(reportStateRef, {
-            lastReportTimestamp: newCutoffISO
-        });
-        showMessage("Cutoff Updated", "The report has been recalculated based on the new timeframe.", false);
-    } catch (e) {
-        console.error("Error updating cutoff:", e);
-        showMessage("Update Failed", e.message, true);
-    }
-}
 	window.handleDeleteEvent = async function(logId, logType) { // 🟢 FIX: logType must be defined here
     // The alert uses logType to confirm the deletion (prevents the ReferenceError)
     if (!confirm(`Are you sure you want to delete the ${logType} event (ID: ${logId.substring(0, 8)}...)? This action cannot be undone and will affect your reports.`)) {
@@ -1159,6 +1082,38 @@ window.handleSaveTaskEdit = async function(taskId) {
              } catch (e) {
                  console.error("Error logging time event:", e);
                  showMessage("Log Error", `Failed to record ${type} event.`, true);
+             }
+         }
+         
+         /**
+          * Records a PERIOD_CUTOFF entry in the time log so each report cutoff
+          * is kept in the history. These entries are ignored by the time
+          * calculations (they only look at clock/break events).
+          * If replacingISO is given and a cutoff entry exists at that time,
+          * that entry is moved instead of adding a new one (a correction).
+          */
+         async function recordPeriodCutoff(cutoffISO, note, replacingISO = null) {
+             try {
+                 if (replacingISO) {
+                     const replacingMs = new Date(replacingISO).getTime();
+                     const existing = rawLogEvents.find(log =>
+                         log.type === 'PERIOD_CUTOFF' && new Date(log.timestamp).getTime() === replacingMs);
+                     if (existing) {
+                         await updateDoc(doc(db, getTimeLogCollectionRef().path, existing.id), {
+                             timestamp: cutoffISO,
+                             note: note
+                         });
+                         return;
+                     }
+                 }
+                 await addDoc(getTimeLogCollectionRef(), {
+                     type: 'PERIOD_CUTOFF',
+                     timestamp: cutoffISO,
+                     note: note
+                 });
+             } catch (e) {
+                 // The cutoff itself is already saved; the log entry is just a record.
+                 console.error("Error recording period cutoff in time log:", e);
              }
          }
          
@@ -1601,6 +1556,7 @@ window.handleMarkReported = async function() {
         await updateDoc(reportStateRef, {
             lastReportTimestamp: now
         });
+        await recordPeriodCutoff(now, 'Marked as reported');
         
         showMessage("Report Cleared", "All current hours have been marked as reported. The report summary is reset.", false);
 
