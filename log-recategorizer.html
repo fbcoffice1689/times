@@ -211,7 +211,16 @@
   .loading-row{text-align:center;color:#9ca3af;padding:20px 0;font-size:13px;font-family:var(--mono);}
   .footnote{font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.5;}
 
+  .totals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .total-card{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fcfbf8;min-width:0;}
+  .total-label{font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;}
+  .total-value{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--work);margin:6px 0 2px;font-variant-numeric:tabular-nums;}
+  .total-sub{font-family:var(--mono);font-size:12px;color:var(--break);}
+  .total-range{font-size:12px;color:#6b7280;margin-top:8px;}
+  .since-input{font-family:var(--sans);font-size:12px;padding:5px 7px;border:1px solid var(--line-strong);border-radius:5px;background:#fff;color:var(--ink);width:100%;max-width:220px;}
+
   @media (max-width:640px){
+    .totals-grid{grid-template-columns:1fr;}
     .filters{flex-direction:column;align-items:stretch;}
     .field select{min-width:0;}
     table{font-size:12px;}
@@ -252,6 +261,33 @@
 </div>
   
   <div id="app-panels" style="display:none;">
+
+    <div class="panel">
+      <h2>Time Totals</h2>
+      <div class="totals-grid">
+        <div class="total-card">
+          <div class="total-label">Current period</div>
+          <div class="total-value" id="total-period-work">—</div>
+          <div class="total-sub" id="total-period-break">&nbsp;</div>
+          <div class="total-range" id="total-period-range">Since last report cutoff</div>
+        </div>
+        <div class="total-card">
+          <div class="total-label">Since a date I choose</div>
+          <div class="total-value" id="total-custom-work">—</div>
+          <div class="total-sub" id="total-custom-break">&nbsp;</div>
+          <div class="total-range">
+            <input type="datetime-local" id="custom-since" class="since-input" aria-label="Count time since">
+          </div>
+        </div>
+        <div class="total-card">
+          <div class="total-label">Overall total</div>
+          <div class="total-value" id="total-all-work">—</div>
+          <div class="total-sub" id="total-all-break">&nbsp;</div>
+          <div class="total-range" id="total-all-range">All recorded time</div>
+        </div>
+      </div>
+      <p class="footnote">Worked time counts Clock In / Break End → Break Start / Clock Out spans; breaks are shown separately and are not included in worked time. If someone is clocked in right now, the open span counts up to the present. Totals use saved data only — unsaved edits in the table below are not included until you click Save.</p>
+    </div>
 
     <div class="panel">
       <h2>Filter</h2>
@@ -470,12 +506,134 @@
   };
   // --- END BACKUP UTILITIES ---
   
+  // --- TIME TOTALS ---
+  let reportCutoffIso = null;   // shared report cutoff from the main time clock
+  const CUSTOM_SINCE_KEY = 'recategorizer.customSince';
+
+  function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // Walk every saved event in time order and turn it into WORK / BREAK spans.
+  // A span still open after the last event runs up to "now".
+  function buildSegments(logs, nowMs) {
+    const sorted = logs
+      .filter((l) => l.timestamp && l.type && !isNaN(new Date(l.timestamp).getTime()))
+      .map((l) => ({ type: l.type, t: new Date(l.timestamp).getTime() }))
+      .sort((a, b) => a.t - b.t);
+
+    const segments = [];
+    let workStart = null;
+    let breakStart = null;
+    const close = (kind, start, end) => { if (end > start) segments.push({ kind, start, end }); };
+
+    sorted.forEach(({ type, t }) => {
+      switch (type) {
+        case 'CLOCK_IN':
+        case 'BREAK_END':
+          if (breakStart !== null) { close('BREAK', breakStart, t); breakStart = null; }
+          if (workStart === null) workStart = t;
+          break;
+        case 'BREAK_START':
+          if (workStart !== null) { close('WORK', workStart, t); workStart = null; }
+          if (breakStart === null) breakStart = t;
+          break;
+        case 'CLOCK_OUT':
+          if (workStart !== null) { close('WORK', workStart, t); workStart = null; }
+          if (breakStart !== null) { close('BREAK', breakStart, t); breakStart = null; }
+          break;
+      }
+    });
+    if (workStart !== null) close('WORK', workStart, nowMs);
+    if (breakStart !== null) close('BREAK', breakStart, nowMs);
+    return segments;
+  }
+
+  // Sum the parts of each span that fall after sinceMs (spans crossing the point are split).
+  function sumSince(segments, sinceMs) {
+    let work = 0, brk = 0;
+    segments.forEach((seg) => {
+      const start = Math.max(seg.start, sinceMs);
+      if (seg.end <= start) return;
+      if (seg.kind === 'WORK') work += seg.end - start;
+      else brk += seg.end - start;
+    });
+    return { work, brk };
+  }
+
+  function setTotal(prefix, totals) {
+    document.getElementById(`total-${prefix}-work`).textContent = formatDuration(totals.work);
+    document.getElementById(`total-${prefix}-break`).textContent = `Breaks ${formatDuration(totals.brk)}`;
+  }
+
+  function renderTotals() {
+    const nowMs = Date.now();
+    const segments = buildSegments(allLogs, nowMs);
+    const dateFmt = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
+
+    // Current period: since the shared report cutoff
+    const cutoffMs = reportCutoffIso ? new Date(reportCutoffIso).getTime() : NaN;
+    setTotal('period', sumSince(segments, isNaN(cutoffMs) ? 0 : cutoffMs));
+    document.getElementById('total-period-range').textContent = isNaN(cutoffMs)
+      ? 'No report cutoff yet (all time)'
+      : `Since ${new Date(cutoffMs).toLocaleString('en-US', dateFmt)}`;
+
+    // Custom point
+    const customVal = document.getElementById('custom-since').value;
+    const customMs = customVal ? new Date(customVal).getTime() : NaN;
+    if (isNaN(customMs)) {
+      document.getElementById('total-custom-work').textContent = '—';
+      document.getElementById('total-custom-break').textContent = 'Pick a date & time below';
+    } else {
+      setTotal('custom', sumSince(segments, customMs));
+    }
+
+    // Overall
+    setTotal('all', sumSince(segments, 0));
+    document.getElementById('total-all-range').textContent = segments.length
+      ? `Since ${new Date(segments[0].start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      : 'No recorded time yet';
+  }
+
+  function subscribeToReportCutoff() {
+    const ref = doc(db, `artifacts/${appId}/public/data/state/report_cutoff`);
+    onSnapshot(ref, (snap) => {
+      reportCutoffIso = snap.exists() ? (snap.data().lastReportTimestamp || null) : null;
+      renderTotals();
+    }, (error) => console.error('Report cutoff subscription error:', error));
+  }
+
+  (function setupCustomSince() {
+    const input = document.getElementById('custom-since');
+    try {
+      const saved = localStorage.getItem(CUSTOM_SINCE_KEY);
+      if (saved) input.value = saved;
+    } catch (e) { /* storage unavailable */ }
+    input.addEventListener('change', () => {
+      try {
+        if (input.value) localStorage.setItem(CUSTOM_SINCE_KEY, input.value);
+        else localStorage.removeItem(CUSTOM_SINCE_KEY);
+      } catch (e) { /* storage unavailable */ }
+      renderTotals();
+    });
+  })();
+
+  // Keep a live (still clocked-in) span ticking
+  setInterval(() => { if (allLogs.length) renderTotals(); }, 1000);
+  // --- END TIME TOTALS ---
+
   function subscribeToLogs() {
+    subscribeToReportCutoff();
     const logsQuery = query(getTimeLogCollectionRef(), orderBy('timestamp', 'desc'));
     onSnapshot(logsQuery, (snapshot) => {
       allLogs = [];
       snapshot.forEach((d) => allLogs.push({ id: d.id, ...d.data() }));
       renderTable();
+      renderTotals();
     }, (error) => {
       console.error('Log subscription error:', error);
       document.getElementById('log-table-body').innerHTML =
