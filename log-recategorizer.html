@@ -383,7 +383,7 @@
     setPersistence, browserLocalPersistence
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
   import {
-    getFirestore, doc, getDoc, addDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, writeBatch
+    getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, writeBatch
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
   const appId = __app_id;
@@ -630,23 +630,56 @@
 
   function subscribeToReportCutoff() {
     onSnapshot(getReportCutoffRef(), (snap) => {
-      reportCutoffIso = snap.exists() ? (snap.data().lastReportTimestamp || null) : null;
+      const data = snap.exists() ? snap.data() : {};
+      reportCutoffIso = data.lastReportTimestamp || null;
+      applySavedCustomSince(data.customSinceTimestamp);
       renderTotals();
       if (allLogs.length) renderTable();
     }, (error) => console.error('Report cutoff subscription error:', error));
   }
 
+  // The "Since a date I choose" point is saved in the shared database (on the
+  // report_cutoff record, as customSinceTimestamp) so it survives reporting,
+  // other browsers and other computers. Reporting hours only changes
+  // lastReportTimestamp, so this value is left alone.
+  function toLocalInputValue(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function applySavedCustomSince(iso) {
+    const input = document.getElementById('custom-since');
+    if (document.activeElement === input) return; // don't fight the person typing
+    if (iso === undefined) {
+      // Nothing saved in the database yet: fall back to this browser's copy once
+      // and move it into the database so other devices get it too.
+      if (!input.value) {
+        try {
+          const legacy = localStorage.getItem(CUSTOM_SINCE_KEY);
+          if (legacy) { input.value = legacy; saveCustomSince(legacy); }
+        } catch (e) { /* storage unavailable */ }
+      }
+      return;
+    }
+    input.value = iso ? toLocalInputValue(iso) : '';
+  }
+
+  async function saveCustomSince(localValue) {
+    const iso = localValue ? new Date(localValue).toISOString() : null;
+    try {
+      await setDoc(getReportCutoffRef(), { customSinceTimestamp: iso }, { merge: true });
+    } catch (e) {
+      console.error('Could not save the custom date:', e);
+      showToast('Could not save that date: ' + e.message, 'error');
+    }
+  }
+
   (function setupCustomSince() {
     const input = document.getElementById('custom-since');
-    try {
-      const saved = localStorage.getItem(CUSTOM_SINCE_KEY);
-      if (saved) input.value = saved;
-    } catch (e) { /* storage unavailable */ }
     input.addEventListener('change', () => {
-      try {
-        if (input.value) localStorage.setItem(CUSTOM_SINCE_KEY, input.value);
-        else localStorage.removeItem(CUSTOM_SINCE_KEY);
-      } catch (e) { /* storage unavailable */ }
+      saveCustomSince(input.value);
       renderTotals();
     });
   })();
